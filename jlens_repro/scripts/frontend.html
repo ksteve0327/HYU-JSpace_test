@@ -1,0 +1,1002 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>J-lens 인터랙티브 스왑 테스터</title>
+<style>
+  :root{--bg:#0f1115;--panel:#181b22;--line:#2a2f3a;--fg:#e6e9ef;--mut:#9aa4b2;
+        --acc:#4f9dff;--good:#38c172;--bad:#e3506b;--warn:#e0a94a}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);
+       font-family:-apple-system,Segoe UI,Roboto,sans-serif;line-height:1.5}
+  header{padding:1rem 1.4rem;border-bottom:1px solid var(--line);
+         display:flex;gap:1rem;align-items:center;flex-wrap:wrap;position:sticky;top:0;background:var(--bg);z-index:5}
+  header h1{font-size:1.05rem;margin:0}
+  .mut{color:var(--mut);font-size:.86rem}
+  main{max-width:1500px;margin:0 auto;padding:1.2rem 2rem 4rem}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+         padding:1rem 1.1rem;margin:1rem 0}
+  .panel h2{margin:.1rem 0 .8rem;font-size:1rem}
+  label{display:block;font-size:.82rem;color:var(--mut);margin:.5rem 0 .2rem}
+  input[type=text],textarea,select{width:100%;background:#0d1017;color:var(--fg);
+       border:1px solid var(--line);border-radius:7px;padding:.5rem .6rem;font-size:.92rem}
+  textarea{resize:vertical;min-height:48px}
+  .row{display:flex;gap:.8rem;flex-wrap:wrap}
+  .row>div{flex:1;min-width:120px}
+  button{background:var(--acc);color:#04101f;border:0;border-radius:7px;
+         padding:.55rem 1rem;font-weight:600;cursor:pointer;font-size:.9rem}
+  button.sec{background:#2a2f3a;color:var(--fg)}
+  button:disabled{opacity:.5;cursor:wait}
+  .chips{display:flex;gap:.4rem;flex-wrap:wrap;margin:.3rem 0}
+  .chip{background:#232833;border:1px solid var(--line);border-radius:20px;
+        padding:.2rem .7rem;font-size:.8rem;cursor:pointer;color:var(--mut)}
+  .chip:hover{color:var(--fg);border-color:var(--acc)}
+  table{border-collapse:collapse;width:100%;font-size:.85rem;margin-top:.6rem}
+  th,td{border:1px solid var(--line);padding:.28rem .5rem;text-align:left}
+  th{background:#12151b;color:var(--mut);position:sticky;top:0}
+  .scroll{max-height:360px;overflow:auto;border:1px solid var(--line);border-radius:8px}
+  .bar{height:16px;background:var(--acc);border-radius:3px;display:inline-block;vertical-align:middle}
+  .barwrap{display:flex;align-items:center;gap:.5rem}
+  .mono{font-family:ui-monospace,Menlo,monospace}
+  .flip-yes{color:var(--good);font-weight:700}.flip-no{color:var(--mut)}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+  @media(max-width:720px){.grid2{grid-template-columns:1fr}}
+  .kpi{font-size:.82rem}.kpi b{color:var(--fg)}
+  .err{color:var(--bad);font-size:.85rem;margin-top:.5rem}
+  .sweepbar{display:flex;align-items:center;gap:.5rem;margin:.15rem 0;font-size:.8rem}
+  .sweepbar .b{height:14px;border-radius:3px}
+  .val{min-width:120px}
+  .rk-good{color:var(--good);font-weight:700}.rk-mid{color:var(--warn)}.rk-bad{color:var(--mut)}
+  code{background:#0d1017;padding:.05rem .3rem;border-radius:4px}
+  /* help overlay */
+  #help{position:fixed;inset:0;background:rgba(8,10,14,.97);z-index:50;overflow:auto;display:none}
+  #help.show{display:block}
+  #help .inner{max-width:1000px;margin:0 auto;padding:1.4rem 2rem}
+  #help h2{border-bottom:1px solid var(--line);padding-bottom:.3rem;margin-top:1.6rem}
+  #help ol,#help ul{padding-left:1.2rem}#help li{margin:.3rem 0}
+  #help .step{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:.8rem 1rem;margin:.7rem 0}
+  .homebar{position:sticky;top:0;background:rgba(8,10,14,.97);display:flex;gap:.6rem;
+           align-items:center;padding:.5rem 0 .8rem;border-bottom:1px solid var(--line)}
+  /* floating home button */
+  #fab{position:fixed;right:18px;bottom:18px;z-index:40;background:var(--acc);color:#04101f;
+       border:0;border-radius:50%;width:48px;height:48px;font-size:1.1rem;cursor:pointer;
+       box-shadow:0 2px 10px rgba(0,0,0,.5)}
+  /* 2-column layout: left controls, right live log + raw output */
+  .cols{display:flex;gap:1.2rem;align-items:flex-start}
+  .left{flex:1;min-width:0}
+  .right{flex:0 0 400px;position:sticky;top:78px;max-height:calc(100vh - 92px);overflow:auto}
+  @media(max-width:900px){.cols{flex-direction:column}
+    .right{position:static;flex:1 1 auto;width:100%;max-height:none}}
+  .logbox{height:320px;overflow:auto;background:#0d1017;border:1px solid var(--line);border-radius:8px;
+          padding:.5rem .6rem;font-family:ui-monospace,Menlo,monospace;font-size:.76rem;line-height:1.5}
+  .logbox .l{margin:.12rem 0;white-space:pre-wrap;word-break:break-word}
+  .logbox .t{color:var(--mut)}
+  .progbox{min-height:24px;font-size:.82rem;margin-bottom:.45rem;color:var(--fg)}
+  .progbox .prun{color:var(--acc);font-weight:700}
+  .progbox .pdone{color:var(--good)}
+  .progbox .pbar{display:inline-block;width:130px;height:9px;background:#0d1017;border:1px solid var(--line);
+    border-radius:5px;vertical-align:middle;margin-left:.5rem;overflow:hidden}
+  .progbox .pfill{display:block;height:100%;background:var(--acc);transition:width .6s linear}
+  .logbox .req{color:var(--acc)}.logbox .ok{color:var(--good)}
+  .logbox .er{color:var(--bad)}.logbox .warnl{color:var(--warn)}
+  .rawbox{background:#0d1017;border:1px solid var(--line);border-radius:8px;padding:.6rem;
+          max-height:400px;overflow:auto;margin:0}
+  .rawbox pre{margin:0;font-family:ui-monospace,Menlo,monospace;font-size:.72rem;
+              white-space:pre-wrap;word-break:break-word}
+  .rawblock+.rawblock{border-top:1px dashed var(--line);padding-top:.55rem;margin-top:.55rem}
+  .rawhdr{color:var(--acc);font-size:.72rem;margin-bottom:.2rem;font-family:ui-monospace,Menlo,monospace;cursor:pointer}
+  .rawblock.collapsed pre{display:none}
+  .rawblock.collapsed .rawhdr{margin-bottom:0}
+  .rawph{color:var(--mut);font-size:.85rem}
+  .interpbox{font-size:.86rem;line-height:1.6}
+  .interpbox .verdict{font-weight:700;display:block;margin-bottom:.4rem}
+  .interpbox .v-ok{color:var(--good)}.interpbox .v-warn{color:var(--warn)}.interpbox .v-bad{color:var(--bad)}
+  .interpbox ul{margin:.3rem 0;padding-left:1.1rem}.interpbox li{margin:.2rem 0}
+  .interpbox b{color:var(--fg)}
+  .interpbox .aicard{border-top:1px dashed var(--line);padding-top:.6rem;margin-top:.7rem}
+  .interpbox .aicard:first-child{border-top:0;padding-top:0;margin-top:0}
+  .interpbox .aicard .verdict{color:var(--acc)}
+  /* chatbot */
+  .chatlog{max-height:300px;overflow:auto;display:flex;flex-direction:column;gap:.5rem;padding:.2rem}
+  .chatlog:empty::before{content:'질문을 입력하세요. (결과 실행 후면 그 맥락으로 답합니다)';color:var(--mut);font-size:.85rem}
+  .cmsg{max-width:88%;padding:.45rem .7rem;border-radius:10px;font-size:.86rem;line-height:1.5;white-space:pre-wrap;word-break:break-word}
+  .cmsg.u{align-self:flex-end;background:var(--acc);color:#04101f}
+  .cmsg.a{align-self:flex-start;background:#232833;border:1px solid var(--line)}
+  .cmsg.a .who{color:var(--mut);font-size:.72rem;display:block;margin-bottom:.15rem}
+  /* slice heatmap */
+  .slice{border-collapse:collapse;font-size:.7rem}
+  .slice th,.slice td{border:1px solid var(--line);padding:.1rem .28rem;white-space:nowrap;
+    text-align:center;max-width:96px;overflow:hidden;text-overflow:ellipsis}
+  .slice th{position:sticky;top:0;background:#12151b;color:var(--mut);z-index:1}
+  .slice td.lyr{color:var(--mut);position:sticky;left:0;background:var(--panel)}
+  .slice .scell{color:#e6e9ef}
+</style>
+</head>
+<body>
+<header>
+  <h1>🔬 J-lens 스왑 테스터</h1>
+  <div>
+    <select id="model" style="width:auto"></select>
+    <span class="mut" id="modelinfo"></span>
+  </div>
+  <span class="mut" id="status"></span>
+  <span style="margin-left:auto;display:flex;gap:.5rem;align-items:center">
+    <button class="sec" id="btnForceStop" style="color:var(--bad);border-color:var(--bad)">■ 강제 중지</button>
+    <button class="sec" id="btnHelp">📖 사용법</button>
+  </span>
+</header>
+
+<main>
+<div class="cols">
+<div class="left">
+  <div class="panel">
+    <label>프롬프트 (읽기·스왑 공용)</label>
+    <textarea id="prompt">The capital of France is</textarea>
+    <div style="margin-top:.5rem;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+      <button id="btnGen">🤖 답변 생성</button>
+      <label class="mut" style="font-size:.8rem;margin:0">생성 토큰 <input type="number" id="genN" value="16" min="1" max="40" style="width:48px;padding:.15rem .3rem"></label>
+      <span class="mut" style="font-size:.8rem">모델이 이 프롬프트에 실제로 이어 쓰는 답변</span>
+    </div>
+    <div id="genOut" style="margin-top:.4rem;font-size:.95rem;line-height:1.5"></div>
+    <div class="chips" id="presets" style="margin-top:.7rem"></div>
+    <div style="margin-top:.6rem;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;font-size:.82rem">
+      <span class="mut">📚 논문 probe-swap (90개):</span>
+      <select id="dsItem" style="width:auto;max-width:360px;padding:.2rem .3rem"><option value="">— 선택 —</option></select>
+    </div>
+    <div class="mut" id="dsHint" style="font-size:.8rem;margin-top:.3rem"></div>
+    <div style="margin-top:.7rem;display:flex;gap:.6rem;align-items:center;flex-wrap:wrap">
+      <button id="btnAll">▶ 1→2→3→4 전체 실행</button>
+      <span class="mut" id="allnote" style="font-size:.8rem"></span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>1. 렌즈 읽기 — 레이어별 top 토큰</h2>
+    <div class="row">
+      <div style="flex:0 0 160px"><label>읽을 위치 (-1=마지막 토큰)</label>
+        <input type="text" id="rpos" value="-1"></div>
+      <div style="flex:0 0 200px"><label>추적할 개념 (층별 rank 표시, 선택)</label>
+        <input type="text" id="rtrack" value="Paris"></div>
+      <div style="flex:0 0 120px;display:flex;align-items:flex-end">
+        <button id="btnRead">읽기 실행</button></div>
+    </div>
+    <div id="readOut"></div>
+  </div>
+
+  <div class="panel">
+    <h2>2. 개입 — 스왑 / 스티어 / 절제 / 콤보</h2>
+    <div class="row">
+      <div style="flex:0 0 250px"><label>개입 모드</label>
+        <select id="ivMode" style="width:100%">
+          <option value="swap">스왑 (개념 교체 A→B)</option>
+          <option value="steer">스티어 (개념 주입+/억제−)</option>
+          <option value="ablate">절제 (개념 제거)</option>
+          <option value="combo">콤보 (동시 적용)</option>
+        </select></div>
+      <div style="flex:1;display:flex;align-items:flex-end"><span class="mut" id="ivModeDesc" style="font-size:.8rem"></span></div>
+    </div>
+    <div id="grpSwap">
+      <div class="row" style="margin-top:.4rem">
+        <div><label>소스 A (뺄 개념)</label><input type="text" id="src" value="Paris"></div>
+        <div><label>타깃 B (넣을 개념)</label><input type="text" id="tgt" value="London"></div>
+      </div>
+      <div class="row" style="margin-top:.4rem">
+        <div><label>기대 답 (성공 판정, 비우면 tgt)</label><input type="text" id="success" value=""></div>
+      </div>
+    </div>
+    <div id="grpConcept" style="display:none">
+      <div class="row" style="margin-top:.4rem"><div><label>개념 토큰 (단일 토큰)</label><input type="text" id="ivConcept" value="London"></div></div>
+    </div>
+    <div id="grpCombo" style="display:none">
+      <div class="mut" style="font-size:.8rem;margin:.4rem 0 .3rem">여러 개입을 추가하면 한 번의 forward에 <b>동시 적용</b>됩니다.</div>
+      <div id="comboList"></div>
+      <div style="display:flex;gap:.4rem;margin-top:.4rem;flex-wrap:wrap">
+        <button class="sec" id="btnAddSwap">+ 스왑</button>
+        <button class="sec" id="btnAddSteer">+ 스티어</button>
+        <button class="sec" id="btnAddAblate">+ 절제</button>
+      </div>
+      <div class="row" style="margin-top:.4rem"><div><label>성공 판정 토큰 (선택)</label><input type="text" id="ivComboMetric" value=""></div></div>
+    </div>
+    <div class="row" style="margin-top:.5rem">
+      <div><label id="alphaLbl">강도 α: <span id="alphaV">2</span></label>
+        <input type="range" id="alpha" min="-8" max="8" step="0.5" value="2" style="width:100%"></div>
+      <div><label>개입 깊이 시작 % (0=첫 층): <span id="loV">40</span></label>
+        <input type="range" id="lo" min="0" max="95" step="5" value="40" style="width:100%"></div>
+      <div><label>개입 깊이 끝 % (100=마지막 층): <span id="hiV">90</span></label>
+        <input type="range" id="hi" min="5" max="100" step="5" value="90" style="width:100%"></div>
+    </div>
+    <div style="margin-top:.6rem;display:flex;gap:1rem;align-items:center;flex-wrap:wrap">
+      <label id="randWrap" style="display:flex;gap:.4rem;align-items:center;margin:0">
+        <input type="checkbox" id="rand"> <span>대조군: 무작위 방향</span></label>
+      <button id="btnIntervene">실행</button>
+      <span class="mut" id="bandinfo"></span>
+    </div>
+    <div class="mut" id="slownote" style="margin:.4rem 0 0;font-size:.8rem"></div>
+    <div id="ivErr" class="err"></div>
+    <div id="ivOut"></div>
+  </div>
+
+  <div class="panel">
+    <h2>3. 레이어 스윕 — 어느 깊이부터 출력이 바뀌나</h2>
+    <div class="mut" style="margin-bottom:.5rem">위 <b>2번에서 선택한 개입</b>을 그대로 쓰고, 개입 위치(깊이)만 얕은 층→깊은 층으로 옮겨가며 P(성공토큰) 측정</div>
+    <div class="row" style="margin-bottom:.4rem">
+      <div style="flex:0 0 210px"><label>창 크기 = 한 번에 개입할 층 수: <span id="winV">6</span></label>
+        <input type="range" id="win" min="2" max="12" step="1" value="6" style="width:100%"></div>
+      <div style="flex:0 0 210px"><label>해상도 = 깊이축 측정 지점 수: <span id="ptsV">8</span></label>
+        <input type="range" id="pts" min="4" max="16" step="1" value="8" style="width:100%"></div>
+    </div>
+    <div class="mut" style="font-size:.78rem;margin-bottom:.5rem">창을 작게(예 3) + 해상도를 크게(예 12~16) 하면 특정 깊이 구간을 더 촘촘히 스캔 → 인과 자리를 좁힐 수 있음(대신 느려짐).</div>
+    <button id="btnSweep">스윕 실행</button>
+    <span class="mut" id="sweepnote" style="margin-left:.6rem;font-size:.8rem"></span>
+    <div id="sweepOut"></div>
+  </div>
+
+  <div class="panel">
+    <h2>4. 슬라이스 히트맵 — 레이어 × 위치</h2>
+    <div class="row" style="margin-bottom:.4rem">
+      <div style="flex:0 0 230px"><label>핀 개념 (색칠 기준 rank, 선택)</label>
+        <input type="text" id="pin" value="Paris"></div>
+      <div style="flex:0 0 130px;display:flex;align-items:flex-end"><button id="btnSlice">슬라이스 실행</button></div>
+      <div style="flex:1;display:flex;align-items:flex-end"><span class="mut" id="slicenote" style="font-size:.8rem"></span></div>
+    </div>
+    <div class="mut" style="font-size:.8rem;margin-bottom:.4rem">논문/Neuronpedia와 동일한 d3 인터랙티브 뷰(레이어×토큰위치). 칸을 클릭해 토큰을 <b>핀 고정</b>하면 rank 추적 차트가 나옵니다. 핀 개념을 입력하면 미리 고정. 맨 아래 행 = 모델 실제 출력.</div>
+    <div id="sliceOut" style="overflow:auto"></div>
+  </div>
+</div><!-- /left -->
+
+<div class="right">
+  <div class="panel">
+    <h2>📋 실시간 로그 <button class="sec" id="btnClearLog" style="float:right;padding:.2rem .6rem;font-size:.75rem">지우기</button></h2>
+    <div id="progress" class="progbox"></div>
+    <div id="log" class="logbox"></div>
+  </div>
+  <div class="panel">
+    <h2 style="margin-bottom:.6rem">🧭 결과 해석</h2>
+    <div style="display:flex;gap:.5rem;align-items:center;margin-bottom:.5rem">
+      <select id="aiModel" style="flex:1;min-width:0;padding:.3rem .4rem;font-size:.78rem"></select>
+      <button class="sec" id="btnAI" style="padding:.3rem .8rem;white-space:nowrap">🧠 해석</button>
+    </div>
+    <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-bottom:.6rem;font-size:.82rem">
+      <button class="sec" id="btnLoop" style="white-space:nowrap">🔁 자동반복</button>
+      <label style="margin:0;white-space:nowrap">최대 <input type="number" id="loopN" value="2" min="1" max="5" style="width:44px;padding:.15rem .3rem">회</label>
+      <label style="margin:0;color:var(--mut);white-space:nowrap"><input type="checkbox" id="loopCap" checked> 해상도6캡</label>
+      <button class="sec" id="btnStop" style="display:none;white-space:nowrap">⏹ 중지</button>
+    </div>
+    <div id="interp" class="interpbox mut">읽기·스왑·스윕을 실행한 뒤 모델을 골라 <b>🧠 해석</b>을 누르면 결과값의 의미를 설명합니다. <b>🔁 자동반복</b>은 해석→제안 적용→재실행을 상한 횟수만큼 반복하며, 매 회 이전 조건과 비교합니다.</div>
+  </div>
+  <div class="panel">
+    <h2>💬 챗봇 — 결과에 대해 질문 <button class="sec" id="btnChatClear" style="float:right;padding:.2rem .6rem;font-size:.75rem">대화 지우기</button></h2>
+    <div class="mut" style="font-size:.8rem;margin-bottom:.4rem">직전 실행 결과·이력을 맥락으로 함께 넘겨 답합니다. 위 드롭다운 모델 사용.</div>
+    <div id="chatlog" class="chatlog"></div>
+    <div style="display:flex;gap:.4rem;margin-top:.5rem">
+      <input type="text" id="chatin" placeholder="예: 왜 후반층에서만 뒤집혀? / 이 결과가 논문과 어떻게 달라?" style="flex:1;min-width:0">
+      <button id="btnChat" style="white-space:nowrap">보내기</button>
+    </div>
+  </div>
+  <div class="panel">
+    <h2>🔢 결과 값 (raw)
+      <span style="float:right;display:flex;gap:.4rem">
+        <button class="sec" id="btnSaveSnap" style="padding:.2rem .6rem;font-size:.75rem">💾 저장(.md)</button>
+        <button class="sec" id="btnClearRaw" style="padding:.2rem .6rem;font-size:.75rem">지우기</button>
+      </span>
+    </h2>
+    <div id="raw" class="rawbox"><div class="rawph">아직 실행 안 함 — 각 단계(읽기/스왑/스윕/슬라이스) 원시 응답이 경계선과 함께 순서대로 쌓입니다.</div></div>
+  </div>
+</div><!-- /right -->
+</div><!-- /cols -->
+</main>
+
+<!-- 사용 설명서 오버레이 -->
+<div id="help">
+  <div class="inner">
+    <div class="homebar">
+      <button id="btnHome">🏠 홈으로</button>
+      <span class="mut">사용 설명서</span>
+    </div>
+
+    <h2 style="border:0;margin-top:1rem">이게 뭔가요?</h2>
+    <p><b>J-lens(Jacobian lens)</b>는 언어모델의 중간 레이어 활성값을 "출력 어휘의 언어"로
+    번역해, 모델이 <b>아직 말하지 않은 생각</b>을 읽어내는 해석기법입니다. 이 도구로 두 가지를 합니다:
+    (1) 레이어별로 무엇이 판독되는지 <b>읽고</b>, (2) 특정 개념 방향을 다른 개념으로 <b>스왑</b>해
+    출력이 어떻게 바뀌는지 실시간으로 봅니다. 모델 가중치는 건드리지 않고 forward pass 중
+    활성값만 수술합니다.</p>
+
+    <h2>기본 흐름</h2>
+    <ol>
+      <li>상단 드롭다운에서 <b>모델</b> 선택 (qwen0.8b=빠름, gemma4b=크고 느림).</li>
+      <li>맨 위 <b>프롬프트</b> 입력(읽기·스왑 공용). 프리셋 칩을 누르면 예시가 채워집니다.</li>
+      <li>아래 세 패널에서 읽기·스왑·스윕을 실행합니다.</li>
+    </ol>
+
+    <h2>1. 렌즈 읽기</h2>
+    <div class="step">
+      <b>무엇:</b> 각 레이어에서 렌즈가 top으로 읽는 토큰과, 추적 토큰의 rank를 봅니다.<br>
+      <b>입력:</b> <code>위치</code>(−1=마지막 토큰), <code>추적 토큰</code>(예: spider).<br>
+      <b>읽는 법:</b> 초반 레이어는 무의미, 중반은 개념(워크스페이스), 후반은 다음-토큰으로 수렴.
+      추적 토큰 rank 색 — <span class="rk-good">초록 ≤5</span>,
+      <span class="rk-mid">노랑 ≤50</span>, 회색 그 이상. rank가 낮을수록(=1에 가까울수록) 강하게 판독.
+    </div>
+
+    <h2>2. 스왑 테스트 (핵심)</h2>
+    <div class="step">
+      <b>무엇:</b> 개념 A(src)의 렌즈 방향을 B(tgt)로 교체한 뒤 다음-토큰 분포가 어떻게 바뀌는지
+      baseline과 나란히 비교합니다.<br>
+      <b>입력:</b>
+      <ul>
+        <li><code>src / tgt</code> — <b>단일 토큰</b> 단어여야 합니다(앞 공백·대문자 변형은 자동 처리).
+          다중 토큰이면 경고가 뜹니다 → cat/dog, Paris/London 같은 단일 토큰어로 바꾸세요.</li>
+        <li><code>α (강도)</code> — 교체 세기. 1~2 권장. <b>너무 크면(≈4) 모델이 붕괴</b>(문장부호만 출력).</li>
+        <li><code>밴드 시작/끝 %</code> — 개입할 레이어 대역(깊이 %). 기본 40–90%(워크스페이스 대역).</li>
+        <li><code>대조군: 무작위 방향</code> — 같은 크기로 <b>무의미한</b> 방향에 개입. 정상이면 tgt로 안 바뀜.</li>
+      </ul>
+      <b>읽는 법:</b> 헤더의 <span class="rk-good">✔ 뒤집힘</span>/✘ 표시, baseline vs swapped 분포,
+      P(src)·P(tgt) 변화. 스왑이 제대로면 P(tgt)↑·P(src)↓ 되고 top-1이 tgt로 바뀝니다.
+    </div>
+
+    <h2>3. 레이어 스윕</h2>
+    <div class="step">
+      <b>무엇:</b> 위 src/tgt/α로 창을 앞→뒤로 옮겨가며 P(tgt) 막대를 그립니다.<br>
+      <b>읽는 법:</b> 어느 <b>깊이(%)부터</b> 출력이 tgt로 뒤집히는지 보입니다. 보통 후반
+      (~80% 깊이)에서 인과적으로 바뀝니다(초록 막대 = 뒤집힌 창).<br>
+      <b>창 크기</b> = 한 번에 개입할 층 수, <b>해상도</b> = 깊이축 측정 지점 수. 창을 작게+해상도를
+      크게 하면 특정 구간을 촘촘히 스캔(대신 느려짐).
+    </div>
+
+    <h2>4. ▶ 1→2→3 전체 실행</h2>
+    <div class="step">맨 위 버튼 하나로 <b>읽기→스왑→스윕</b>을 순서대로 자동 실행. 오른쪽 실시간
+      로그에 단계별 진행이 찍힙니다. gemma는 수 분 소요.</div>
+
+    <h2>5. 📚 논문 probe-swap 불러오기</h2>
+    <div class="step">
+      Anthropic 공개 데이터셋(90개 2-hop 문항)을 드롭다운에서 고르면 프롬프트·src·tgt·기대 답이
+      자동 세팅됩니다.<br>
+      각 문항은 <b>브리지 개념(src)</b>을 다른 개념(tgt)으로 바꿨을 때 <b>최종 답이 기대 답으로
+      바뀌는지</b>가 성공. 예: Brazil→Mexico 스왑 → 답 Portuguese→Spanish.<br>
+      <b>기대 답 필드</b> = 성공 판정 토큰. probe-swap은 swap_answer로 자동 채움. 비우면 tgt로
+      판정(Paris→London 같은 단순 케이스). 브리지·답이 다중 토큰인 문항은 스왑 불가(안내 뜸).
+    </div>
+
+    <h2>6. 🧭 결과 해석 (AI) + 🔁 자동반복</h2>
+    <div class="step">
+      결과 실행 후 모델을 골라 <b>🧠 해석</b> → LLM이 결과 JSON을 한국어로 풀어주고, 다음 제안과
+      실행 가능한 제안값을 냅니다.<br>
+      <b>모델 선택:</b> OpenRouter(유료·빠름) 또는 <b>🔒 Claude구독(프록시, 무료·정확)</b>.<br>
+      <b>▶ 이 제안대로 재실행:</b> 해석의 제안값을 컨트롤에 적용하고 즉시 재실행.<br>
+      <b>🔁 자동반복 N회:</b> 해석→제안 적용→재실행을 상한 N회 반복(무한 루프 방지). <b>⏹ 중지</b>로
+      멈춤, <b>해상도6캡</b>으로 속도 조절. 매 회 <b>이전 조건과 비교</b>해 무엇을 바꿨고 지표가
+      개선/악화됐는지, 수렴하는지까지 분석합니다.<br>
+      해석은 <b>읽기·스왑·스윕·슬라이스를 한 번에 묶어(bundle)</b> 종합 분석하므로, 슬라이스(히트맵)를
+      돌렸다면 그 판독까지 함께 설명합니다. 기본 해석 모델은 <b>opus-4.8</b>(구독).
+    </div>
+
+    <h2>7. 💬 챗봇 — 결과에 대해 질문</h2>
+    <div class="step">
+      결과 해석 아래 대화창에 자유롭게 질문. 현재 실행 결과·이력을 <b>맥락으로 자동 전송</b>해 답합니다
+      (예: "왜 후반층에서만 뒤집혀?", "논문 결과랑 어떻게 달라?"). 모델은 위 드롭다운 선택 사용.
+    </div>
+
+    <h2>8. 🔢 결과 값 (raw) & 🖥 진행 표시</h2>
+    <div class="step">
+      각 단계 원시 JSON이 <b>접을 수 있는 블록</b>으로 순서대로 <b>쌓입니다</b>(경계선 구분). 헤더(예
+      <code>▸ 2. 스왑</code>)를 클릭해 펼치기/접기. 전체 실행 시작 시 자동으로 비워집니다.<br>
+      실시간 로그 위엔 <b>진행 바</b>: 현재 작업·경과 시간·예상 ETA를 초 단위로 표시.
+    </div>
+
+    <h2>9. ■ 강제 중지 & ▶ 1→2→3→4 전체 실행</h2>
+    <div class="step">
+      상단 <b>■ 강제 중지</b>: 오래 걸리는 요청을 취소하고 자동반복을 멈춥니다(진행 중이던 서버 계산은
+      백그라운드에서 마무리될 수 있음 — GPU forward는 강제 종료 불가). UI가 즉시 풀립니다.<br>
+      <b>▶ 전체 실행</b>: 읽기+스왑+스윕+슬라이스를 순차 실행. 최적화로 <b>슬라이스 forward가 읽기를
+      겸해</b> forward 1회를 아낍니다.
+    </div>
+
+    <h2>팁 / 주의</h2>
+    <ul>
+      <li>숫자 답은 <code>8</code>/<code>eight</code>/<code>six</code> 등 변형이 있으니 여러 개 시도.</li>
+      <li>작은 모델은 사실추론이 약해 스왑 효과가 안 보일 수 있습니다(정상 — 규모의 한계).</li>
+      <li>gemma는 로드가 8.6GB로 느립니다. 첫 전환 시 잠시 기다리세요.</li>
+    </ul>
+
+    <div style="margin:1.4rem 0 2rem"><button id="btnHome2">🏠 홈으로 돌아가기</button></div>
+  </div>
+</div>
+<button id="fab" title="맨 위로">🏠</button>
+
+<script>
+const $ = s => document.querySelector(s);
+const PRESETS = [
+  ["The number of legs on the animal that spins webs is", "spider", "ant"],
+  ["The capital of France is", "Paris", "London"],
+  ["The opposite of hot is", "cold", "warm"],
+  ["The color of the sky on a clear day is", "blue", "red"],
+];
+let CFG = null;
+
+// ---- 실시간 로그 + 원시 결과 출력 ----
+function nowStr(){ return new Date().toLocaleTimeString('ko-KR',{hour12:false}); }
+function log(msg, cls){
+  const box=$('#log'); const atBottom = box.scrollHeight-box.scrollTop-box.clientHeight < 30;
+  const d=document.createElement('div'); d.className='l '+(cls||'');
+  d.innerHTML=`<span class="t">${nowStr()}</span>  ${esc(msg)}`;
+  box.appendChild(d);
+  if(atBottom) box.scrollTop=box.scrollHeight;
+}
+function showRaw(obj, label){
+  const raw=$('#raw'); const ph=raw.querySelector('.rawph'); if(ph) ph.remove();
+  raw.querySelectorAll('.rawblock').forEach(x=>x.classList.add('collapsed')); // 이전 블록 접기
+  const b=document.createElement('div'); b.className='rawblock';
+  const base=`${label||'result'} · ${nowStr()}`;
+  const h=document.createElement('div'); h.className='rawhdr'; h.textContent='▾ '+base;
+  h.onclick=()=>{ const c=b.classList.toggle('collapsed'); h.textContent=(c?'▸ ':'▾ ')+base; };
+  const pre=document.createElement('pre'); pre.textContent=JSON.stringify(obj,null,2);
+  b.appendChild(h); b.appendChild(pre); raw.appendChild(b); raw.scrollTop=raw.scrollHeight;
+}
+function clearRaw(){ $('#raw').innerHTML='<div class="rawph">지워짐 — 다음 실행부터 다시 쌓입니다.</div>'; }
+$('#btnClearLog').onclick = ()=>{ $('#log').innerHTML=''; };
+$('#btnClearRaw').onclick = clearRaw;
+function buildSnapshotMd(){
+  let md=`# J-lens 실험 스냅샷\n\n- 시각: ${new Date().toLocaleString('ko-KR')}\n- 모델: ${CFG&&CFG.model_id}\n`
+    +`- 프롬프트: \`${$('#prompt').value}\`\n- src→tgt: ${$('#src').value} → ${$('#tgt').value}`
+    +`${$('#success').value?` · 기대답 ${$('#success').value}`:''}\n\n`;
+  md+=`## 결과 요약 (읽기·스왑·스윕·슬라이스)\n\`\`\`json\n${JSON.stringify(bundleSummary(),null,2)}\n\`\`\`\n\n`;
+  if($('#interp') && !$('#interp').classList.contains('mut')) md+=`## AI 해석\n${$('#interp').innerText}\n\n`;
+  if(chatMessages.filter(m=>!m.pending).length) md+=`## 챗봇 대화\n`
+    +chatMessages.filter(m=>!m.pending).map(m=>`**${m.role==='user'?'나':(m.model||'AI')}:** ${m.content}`).join('\n\n')+`\n`;
+  return md;
+}
+$('#btnSaveSnap').onclick = async ()=>{
+  log('▶ 스냅샷 저장…','req');
+  try{
+    const r=await fetch('/api/save',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({markdown:buildSnapshotMd()})});
+    const d=await r.json();
+    if(d.ok){ log('💾 저장됨: '+d.path,'ok'); setStatus('저장됨: '+d.path); }
+    else { log('저장 실패: '+JSON.stringify(d),'er'); }
+  }catch(e){ log('저장 오류 '+e,'er'); }
+};
+
+// ---- 결과 해석 (OpenRouter LLM) ----
+let lastCtx = null;
+
+// 실행 이력(해석 시 이전 조건/결과와 비교 분석용). 최근 6개 유지.
+let runHistory = [];
+function summarizeCtx(c){
+  const d = c.data || {};
+  if(c.kind==='swap'||c.kind==='steer'||c.kind==='ablate'||c.kind==='combo')
+    return {kind:c.kind, ops:d.ops, metric:d.metric, band_pct:d.band_pct, flipped:d.flipped,
+      P_metric:[d.baseline&&d.baseline.metric&&d.baseline.metric.p, d.intervened&&d.intervened.metric&&d.intervened.metric.p]};
+  if(c.kind==='sweep'){ const pts=d.points||[]; const fl=pts.filter(p=>p.flipped);
+    return {kind:'sweep', src:c.src, tgt:c.tgt, window:pts[0]&&pts[0].window, n_points:pts.length,
+      flipped_at_pct:fl.map(p=>p.pct), max_p_tgt:Math.max(0,...pts.map(p=>p.p_tgt)),
+      curve:pts.map(p=>[p.pct,p.p_tgt])}; }
+  if(c.kind==='read'){ const rs=(d.layers||[]).filter(L=>L.track_rank!=null).map(L=>L.track_rank);
+    return {kind:'read', track:d.track, best_rank: rs.length?Math.min(...rs):null, model_next:d.model_top&&d.model_top[0]}; }
+  if(c.kind==='slice'){ const pr=(d.pin_rank_by_layer||[]).filter(x=>x.best_rank!=null);
+    const best=pr.length?pr.reduce((a,b)=>b.best_rank<a.best_rank?b:a):null;
+    return {kind:'slice', pin:d.pin, best_pin_rank:best&&best.best_rank, best_layer:best&&best.layer, best_pos:best&&best.at_tok}; }
+  return {kind:c.kind};
+}
+// 종류별 최신 결과 (해석 시 읽기+스왑+스윕+슬라이스를 묶어서 종합 분석)
+let results={};
+function pushHistory(ctx){ runHistory.push(summarizeCtx(ctx)); if(runHistory.length>6) runHistory.shift(); results[ctx.kind]=ctx; }
+function bundleSummary(){
+  const out={};
+  for(const [k,c] of Object.entries(results)){
+    const d=c.data||{};
+    if(k==='read') out.read={model_top:d.model_top, track:d.track, per_layer_rank:(d.layers||[]).map(L=>[L.layer,L.track_rank])};
+    else if(k==='swap'||k==='steer'||k==='ablate'||k==='combo') out[k]={ops:d.ops,metric:d.metric,band_pct:d.band_pct,flipped:d.flipped,
+      P_metric:[d.baseline&&d.baseline.metric&&d.baseline.metric.p,d.intervened&&d.intervened.metric&&d.intervened.metric.p],
+      after_top:(d.intervened&&d.intervened.top||[]).slice(0,5).map(t=>t.tok)};
+    else if(k==='sweep') out.sweep={src:c.src,tgt:c.tgt,curve:(d.points||[]).map(p=>[p.pct,p.p_tgt,p.flipped,p.top1])};
+    else if(k==='slice') out.slice=d; // 이미 요약(pin_rank_by_layer + top1_at_last_pos_by_layer)
+  }
+  return out;
+}
+function setInterpRaw(html){ $('#interp').classList.remove('mut'); $('#interp').innerHTML=html; }
+function readyInterp(){
+  setInterpRaw(CFG && CFG.has_llm
+    ? '결과 준비됨 — 위 <b>🧠 AI 해석</b> 버튼을 누르면 이 결과값을 설명해 드립니다.'
+    : '⚠ AI 해석을 쓰려면 <code>jlens_repro/.env</code>에 <code>OPENROUTER_API_KEY</code>를 넣고 서버를 재시작하세요.');
+}
+function mdToHtml(s){
+  return esc(s)
+    .replace(/\*\*(.+?)\*\*/g,'<b>$1</b>')
+    .replace(/`([^`]+?)`/g,'<code>$1</code>')
+    .replace(/^\s*[-*]\s+(.*)$/gm,'• $1')
+    .replace(/\n/g,'<br>');
+}
+async function doInterpret(model, ctx){
+  const history = runHistory.slice(0,-1); // 이전 실행들(현재 제외)
+  log(`▶ AI 해석 요청 (${ctx.kind}, ${model}${history.length?` · 이전 ${history.length}회 비교`:''}) · 예상 ~${eta('interpret')}s`,'req');
+  const stop=startProg(`AI 해석 (${model})`, eta('interpret')); const t0=performance.now();
+  try{
+    const _c=abReg();
+    const r=await fetch('/api/interpret',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({kind:ctx.kind, payload:ctx, model, history, bundle:bundleSummary()}), signal:_c.signal}).finally(()=>abDone(_c));
+    const data=await r.json();
+    log(`◀ AI 해석 [${model}] · ${((performance.now()-t0)/1000).toFixed(1)}s · HTTP ${r.status}`, r.ok?'ok':'er');
+    stop(r.ok);
+    return {ok:r.ok, data};
+  }catch(e){ stop(false); log('✖ AI 해석 오류 '+e,'er'); return {ok:false, data:{error:String(e)}}; }
+}
+function renderInterp(model, prose, sug, tag){
+  const extra=(sug&&sug.action)?`<div style="margin-top:.7rem"><button class="sec" id="btnApply">▶ 이 제안대로 세팅하고 재실행 (${esc(sug.action)})</button></div>`:'';
+  $('#interp').classList.remove('mut');
+  $('#interp').innerHTML=`<span class="verdict">🧠 ${esc(model)}${tag?(' · '+esc(tag)):''}</span>${mdToHtml(prose)}${extra}`;
+  if(sug&&sug.action) $('#btnApply').onclick=applyAndRun;
+}
+$('#btnAI').onclick = async ()=>{
+  if(!CFG || !CFG.has_llm){ readyInterp(); return; }
+  if(!lastCtx){ setInterpRaw('먼저 읽기·스왑·스윕을 한 번 실행하세요.'); return; }
+  const model = $('#aiModel').value;
+  $('#btnAI').disabled=true; $('#interp').classList.remove('mut');
+  $('#interp').innerHTML=`🧠 <b>${esc(model)}</b> 해석 생성 중…`;
+  const r=await doInterpret(model, lastCtx);
+  if(!r.ok){ $('#interp').innerHTML=`<span class="verdict v-bad">AI 해석 실패</span>${esc(JSON.stringify(r.data))}`; }
+  else { const {prose, sug}=extractSuggestion(r.data.text); lastSuggestion=sug; renderInterp(r.data.model||model, prose, sug); }
+  $('#btnAI').disabled=false;
+};
+
+// ---- 전체 실행(1→2→3) + 제안대로 재실행 ----
+const readClick = ()=>$('#btnRead').onclick();
+const swapClick = ()=>runIntervene();
+const sweepClick = ()=>$('#btnSweep').onclick();
+const sliceClick = ()=>$('#btnSlice').onclick();
+let RUNNING=false;
+async function runAll(){
+  if(RUNNING) return; RUNNING=true; $('#btnAll').disabled=true;
+  // 최적화: 슬라이스 forward 1회가 읽기(마지막 위치)를 포함 → 읽기 forward 생략.
+  const totEta = eta('slice')+eta('swap')+eta('sweep', +$('#pts').value);
+  const t0all=performance.now();
+  clearRaw();
+  log(`════ 전체 실행 시작 · 슬라이스+읽기 공유 → 스왑 → 스윕 · 전체 예상 ~${totEta}s (${Math.round(totEta/60*10)/10}분, 읽기 forward 절약) ════`,'req');
+  try{
+    log('— 1&4단계: 슬라이스(d3) + 읽기 (forward 공유) …','req');
+    const sd = await runSlice();
+    if(sd && sd.ok && sd.read){ renderRead(sd.read); log(`읽기: 슬라이스에서 파생 · 렌즈 최종층 top '${sd.read.model_top[0]}' (읽기 forward 생략됨)`,'ok'); }
+    log(`— 2단계: 개입(${$('#ivMode').value}) …`,'req'); await runIntervene();
+    log('— 3단계: 레이어 스윕 …','req'); await sweepClick();
+    log(`════ 전체 실행 완료 · 총 ${((performance.now()-t0all)/1000).toFixed(0)}s ════`,'ok');
+  }catch(e){ log('✖ 전체 실행 오류: '+e,'er'); }
+  finally{ RUNNING=false; $('#btnAll').disabled=false; }
+}
+$('#btnAll').onclick = runAll;
+
+let lastSuggestion=null;
+function extractSuggestion(text){
+  const m = text.match(/```json\s*([\s\S]*?)```/i);
+  if(!m) return {prose:text, sug:null};
+  let sug=null; try{ sug=JSON.parse(m[1]); }catch(e){}
+  return {prose:text.replace(m[0],'').trim(), sug};
+}
+function setSlider(id,v){ if(v==null) return; const el=$('#'+id); if(!el) return; el.value=v; el.dispatchEvent(new Event('input')); }
+function applySettings(s){
+  if(s.prompt!=null) $('#prompt').value=s.prompt;
+  if(s.src!=null){ $('#src').value=s.src; $('#rtrack').value=s.src; }
+  if(s.tgt!=null) $('#tgt').value=s.tgt;
+  if(s.pin!=null) $('#pin').value=s.pin;
+  if(s.position!=null) $('#rpos').value=s.position;
+  setSlider('alpha', s.alpha);
+  setSlider('lo', s.depth_start); setSlider('hi', s.depth_end);
+  setSlider('win', s.window); setSlider('pts', s.points);
+}
+async function runAction(a){
+  if(a==='read') return readClick();
+  if(a==='swap'||a==='steer'||a==='ablate'){ $('#ivMode').value=a; showGrp(a); return runIntervene(); }
+  if(a==='slice') return $('#btnSlice').onclick();
+  if(a==='all'||a==='full') return runAll();
+  return sweepClick(); // 기본: 스윕
+}
+async function applyAndRun(){
+  if(!lastSuggestion) return;
+  log('▶ 제안대로 재실행: '+JSON.stringify(lastSuggestion),'req');
+  applySettings(lastSuggestion);
+  await runAction(lastSuggestion.action);
+  log('◀ 제안 재실행 완료','ok');
+}
+
+// 제안대로 자동 반복 (해석→적용→재실행) N회 상한 + 중지
+let STOP_LOOP=false;
+$('#btnStop').onclick = ()=>{ STOP_LOOP=true; log('⏹ 중지 요청 — 현재 단계 후 멈춤','warnl'); };
+async function autoLoop(){
+  if(!CFG || !CFG.has_llm){ readyInterp(); return; }
+  if(!lastCtx){ setInterpRaw('먼저 읽기·스왑·스윕(또는 ▶ 전체 실행)을 한 번 실행하세요.'); return; }
+  const N = Math.max(1, Math.min(parseInt($('#loopN').value)||2, 5));
+  const model = $('#aiModel').value, capOn = $('#loopCap').checked;
+  STOP_LOOP=false;
+  $('#btnLoop').disabled=true; $('#btnAI').disabled=true; $('#btnAll').disabled=true; $('#btnStop').style.display='';
+  log(`🔁 자동 반복 시작 (최대 ${N}회 · ${model}${capOn?' · 해상도6캡':''})`,'req');
+  for(let i=1;i<=N && !STOP_LOOP;i++){
+    const r = await doInterpret(model, lastCtx);
+    if(!r.ok){ log('✖ 해석 실패 → 중단','er'); break; }
+    const {prose, sug} = extractSuggestion(r.data.text); lastSuggestion=sug;
+    renderInterp(r.data.model||model, prose, sug, `자동반복 ${i}/${N}`);
+    if(STOP_LOOP){ log('⏹ 중지됨','warnl'); break; }
+    if(!sug || !sug.action){ log('제안 없음 → 종료','warnl'); break; }
+    log(`🔁 ${i}/${N} 제안 적용: ${JSON.stringify(sug)}`,'req');
+    applySettings(sug);
+    if(capOn && sug.points) setSlider('pts', Math.min(sug.points, 6));
+    await runAction(sug.action);
+    if(STOP_LOOP){ log('⏹ 중지됨','warnl'); break; }
+  }
+  log('🔁 자동 반복 종료','ok');
+  $('#btnLoop').disabled=false; $('#btnAI').disabled=false; $('#btnAll').disabled=false; $('#btnStop').style.display='none';
+}
+$('#btnLoop').onclick = autoLoop;
+
+// ---- 챗봇 (결과에 대해 질문) ----
+let chatMessages=[]; let chatBusy=false;
+function chatContext(){
+  return { current: lastCtx? {kind:lastCtx.kind, data:lastCtx.data} : null,
+           recent_history: runHistory.slice(-4),
+           inputs: {prompt:$('#prompt').value, src:$('#src').value, tgt:$('#tgt').value,
+                    success:$('#success').value, model: CFG&&CFG.model_id} };
+}
+function renderChat(){
+  $('#chatlog').innerHTML = chatMessages.map(m=>
+    m.role==='user' ? `<div class="cmsg u">${esc(m.content)}</div>`
+    : `<div class="cmsg a"><span class="who">🧠 ${esc(m.model||'assistant')}</span>${m.pending?'…':mdToHtml(m.content)}</div>`
+  ).join('');
+  const cl=$('#chatlog'); cl.scrollTop=cl.scrollHeight;
+}
+async function sendChat(){
+  if(chatBusy) return;
+  if(!CFG||!CFG.has_llm){ chatMessages.push({role:'assistant',content:'⚠ AI 모델이 없습니다. .env에 OPENROUTER_API_KEY를 넣거나 claude-proxy를 켜세요.'}); renderChat(); return; }
+  const text=$('#chatin').value.trim(); if(!text) return;
+  $('#chatin').value='';
+  chatMessages.push({role:'user',content:text});
+  const model=$('#aiModel').value;
+  chatMessages.push({role:'assistant',model,pending:true}); renderChat();
+  chatBusy=true; $('#btnChat').disabled=true;
+  log(`▶ 챗봇 질문 (${model})`,'req'); const stop=startProg(`챗봇 (${model})`, eta('interpret'));
+  try{
+    const msgs=chatMessages.filter(m=>!m.pending).map(m=>({role:m.role,content:m.content}));
+    const _c=abReg();
+    const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({messages:msgs, model, context:chatContext()}), signal:_c.signal}).finally(()=>abDone(_c));
+    const data=await r.json(); stop(r.ok);
+    chatMessages.pop(); // pending 제거
+    if(!r.ok){ chatMessages.push({role:'assistant',content:'오류: '+esc(JSON.stringify(data)),model}); log('✖ 챗봇 오류','er'); }
+    else { chatMessages.push({role:'assistant',content:data.text,model:data.model||model}); log(`◀ 챗봇 답변 [${data.model||model}]`,'ok'); }
+    renderChat();
+  }catch(e){ stop(false); chatMessages.pop(); chatMessages.push({role:'assistant',content:'오류: '+e,model}); renderChat(); log('✖ 챗봇 오류 '+e,'er'); }
+  chatBusy=false; $('#btnChat').disabled=false;
+}
+$('#btnChat').onclick=sendChat;
+$('#chatin').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); sendChat(); } });
+$('#btnChatClear').onclick=()=>{ chatMessages=[]; renderChat(); };
+
+// 예상 소요(초) — 모델 규모에 따라. gemma(대형)는 콜드스타트로 첫 회 더 느림.
+function eta(kind, n){
+  const big = CFG && CFG.n_layers>=30;
+  if(kind==='read'||kind==='slice') return big?40:4;
+  if(kind==='swap') return big?40:6;
+  if(kind==='sweep') return (n|| (big?8:12)) * (big?16:2);
+  if(kind==='interpret') return 20;
+  if(kind==='generate') return big? Math.max(15, Math.round((n||16)*1.2)) : 3;
+  if(kind==='steer') return big?40:6;
+  if(kind==='steer_sweep') return big?(n||6)*16:(n||6)*2;
+  return 15;
+}
+
+// ---- 2. 개입 (스왑/스티어/절제/콤보) ----
+const IV_DESC={swap:'개념 A를 B로 교체', steer:'개념을 residual에 주입(+)/억제(−)', ablate:'개념 방향 제거', combo:'여러 개입을 한 forward에 동시 적용'};
+const IV_LABEL={swap:'2. 스왑',steer:'2. 스티어',ablate:'2. 절제',combo:'2. 콤보'};
+function showGrp(mode){
+  $('#grpSwap').style.display = mode==='swap'?'':'none';
+  $('#grpConcept').style.display = (mode==='steer'||mode==='ablate')?'':'none';
+  $('#grpCombo').style.display = mode==='combo'?'':'none';
+  $('#randWrap').style.display = mode==='swap'?'':'none';
+  $('#ivModeDesc').textContent = IV_DESC[mode]||'';
+  const a=$('#alpha');
+  if(mode==='ablate'){ a.min=0;a.max=2;a.step=0.5;a.value=1; $('#alphaLbl').innerHTML='제거 강도: <span id="alphaV">1</span>'; }
+  else if(mode==='steer'){ a.min=-8;a.max=8;a.step=1;a.value=4; $('#alphaLbl').innerHTML='강도 α: <span id="alphaV">4</span> (음수=억제)'; }
+  else { a.min=-8;a.max=8;a.step=0.5;a.value=2; $('#alphaLbl').innerHTML='강도 α: <span id="alphaV">2</span>'; }
+  $('#alphaV').textContent=a.value;
+}
+$('#ivMode').onchange = ()=>showGrp($('#ivMode').value);
+
+let comboRows=[];
+function mkInput(v,ph,w){ const e=document.createElement('input'); e.type='text'; e.value=v; e.placeholder=ph; e.style.width=w+'px'; return e; }
+function renderCombo(){
+  const box=$('#comboList'); box.innerHTML='';
+  if(!comboRows.length){ box.innerHTML='<span class="mut" style="font-size:.8rem">개입을 추가하세요.</span>'; return; }
+  comboRows.forEach((op,i)=>{
+    const row=document.createElement('div'); row.style.cssText='display:flex;gap:.4rem;align-items:center;margin:.2rem 0;font-size:.85rem;flex-wrap:wrap';
+    const lab=document.createElement('span'); lab.className='mut'; lab.style.minWidth='44px'; lab.textContent=op.type; row.appendChild(lab);
+    if(op.type==='swap'){ const s=mkInput(op.src||'','src',84); s.oninput=()=>op.src=s.value; row.appendChild(s);
+      const ar=document.createElement('span'); ar.textContent='→'; row.appendChild(ar);
+      const t=mkInput(op.tgt||'','tgt',84); t.oninput=()=>op.tgt=t.value; row.appendChild(t);
+    } else { const c=mkInput(op.concept||'','개념',120); c.oninput=()=>op.concept=c.value; row.appendChild(c); }
+    const al=document.createElement('span'); al.textContent='α'; row.appendChild(al);
+    const an=document.createElement('input'); an.type='number'; an.step='0.5'; an.value=op.alpha; an.style.width='54px'; an.oninput=()=>op.alpha=+an.value; row.appendChild(an);
+    const del=document.createElement('button'); del.className='sec'; del.textContent='×'; del.style.padding='.1rem .5rem'; del.onclick=()=>{comboRows.splice(i,1);renderCombo();}; row.appendChild(del);
+    box.appendChild(row);
+  });
+}
+function addCombo(t){ comboRows.push(t==='swap'?{type:'swap',src:'Paris',tgt:'London',alpha:2}:{type:t,concept:'London',alpha:t==='ablate'?1:4}); renderCombo(); }
+$('#btnAddSwap').onclick=()=>addCombo('swap'); $('#btnAddSteer').onclick=()=>addCombo('steer'); $('#btnAddAblate').onclick=()=>addCombo('ablate');
+
+function intervenePayload(){
+  const mode=$('#ivMode').value;
+  const b={prompt:$('#prompt').value, mode, alpha:+$('#alpha').value, lo:+$('#lo').value, hi:+$('#hi').value};
+  if(mode==='swap'){ b.src=$('#src').value; b.tgt=$('#tgt').value; b.success=$('#success').value; b.random_dir=$('#rand').checked; }
+  else if(mode==='steer'||mode==='ablate'){ b.concept=$('#ivConcept').value; }
+  else if(mode==='combo'){ b.ops=comboRows.map(o=>({...o})); b.metric=$('#ivComboMetric').value; }
+  return b;
+}
+async function runIntervene(){
+  $('#ivErr').textContent=''; $('#btnIntervene').disabled=true;
+  const mode=$('#ivMode').value;
+  const r=await api('/api/intervene', intervenePayload(), {label:IV_LABEL[mode], eta:eta('steer')});
+  $('#btnIntervene').disabled=false;
+  if(!r.ok){
+    if(r.data.error==='multi_token') $('#ivErr').innerHTML=`단일 토큰이 아님: ${(r.data.words||[]).map(esc).join(', ')} — 단일 토큰 단어로 바꾸세요.`;
+    else $('#ivErr').textContent='오류: '+esc(JSON.stringify(r.data));
+    $('#ivOut').innerHTML=''; return;
+  }
+  const d=r.data, m=d.metric, bm=d.baseline.metric, im=d.intervened.metric;
+  log(`${mode}: flip ${d.flipped?'✔':'✘'}${m?` · P(${m}) ${bm?bm.p:'-'}→${im?im.p:'-'}`:''} · top1 '${d.intervened.top[0].tok}'`, d.flipped?'ok':'warnl');
+  lastCtx={kind:mode, prompt:$('#prompt').value, concept:(mode==='steer'||mode==='ablate')?$('#ivConcept').value.trim():undefined,
+    src:$('#src').value.trim(), tgt:$('#tgt').value.trim(), success:$('#success').value.trim(), data:d}; pushHistory(lastCtx); readyInterp();
+  const flip=d.flipped?`<span class="flip-yes">✔ top1=${m?'성공토큰':'개념'}</span>`:`<span class="flip-no">✘ top1≠${esc(m||'개념')}</span>`;
+  $('#ivOut').innerHTML=`
+    <div class="mut" style="margin:.5rem 0">${mode} · 개입 깊이 ${d.band_pct[0]}–${d.band_pct[1]}% (레이어 ${d.band[0]}–${d.band.at(-1)})${mode==='combo'?` · ${d.ops.length}개 동시`:` · α=${d.ops[0]&&d.ops[0].alpha}`} · ${flip}</div>
+    <div class="grid2">
+      <div><h3 style="font-size:.9rem;margin:.2rem 0">baseline</h3>${distTable(d.baseline.top)}
+        ${bm?`<div class="kpi mut" style="margin-top:.4rem">P(${esc(m)})=<b>${bm.p}</b> r${bm.rank}</div>`:''}</div>
+      <div><h3 style="font-size:.9rem;margin:.2rem 0">개입 후</h3>${distTable(d.intervened.top)}
+        ${im?`<div class="kpi mut" style="margin-top:.4rem">P(${esc(m)})=<b>${im.p}</b> r${im.rank}</div>`:''}</div>
+    </div>`;
+}
+$('#btnIntervene').onclick = runIntervene;
+showGrp('swap'); renderCombo();
+async function runGenerate(){
+  $('#btnGen').disabled=true; $('#genOut').innerHTML='<span class="mut">생성 중…</span>';
+  const nTok=+$('#genN').value;
+  const r=await api('/api/generate',{prompt:$('#prompt').value, max_new_tokens:nTok},
+    {label:'🤖 답변 생성', eta:eta('generate', nTok)});
+  $('#btnGen').disabled=false;
+  if(r.ok){ $('#genOut').innerHTML=`<span class="mut">${esc($('#prompt').value)}</span><b style="color:var(--good)">${esc(r.data.continuation)}</b>`;
+    log(`🤖 답변: '${(r.data.continuation||'').slice(0,60)}'`,'ok'); }
+  else $('#genOut').innerHTML=`<span class="err">생성 실패: ${esc(JSON.stringify(r.data))}</span>`;
+}
+if($('#btnGen')) $('#btnGen').onclick=runGenerate;
+// 살아있는 진행 표시(경과/ETA/바). 반환값 호출로 종료.
+let _progTimer=null;
+function startProg(label, etaSec){
+  const t0=performance.now();
+  if(_progTimer) clearInterval(_progTimer);
+  const upd=()=>{ const s=(performance.now()-t0)/1000;
+    const pct=etaSec?Math.min(99,s/etaSec*100):0;
+    const over=etaSec&&s>etaSec?' (예상 초과…거의 다 됨)':'';
+    $('#progress').innerHTML=`<span class="prun">🔄 ${esc(label)}</span> · ${s.toFixed(0)}s`
+      +(etaSec?` / 예상 ~${etaSec}s`:'')+over
+      +`<span class="pbar"><span class="pfill" style="width:${pct.toFixed(0)}%"></span></span>`;
+  };
+  upd(); _progTimer=setInterval(upd,1000);
+  return (ok=true)=>{ if(_progTimer){clearInterval(_progTimer);_progTimer=null;}
+    const s=((performance.now()-t0)/1000).toFixed(1);
+    $('#progress').innerHTML=ok?`<span class="pdone">✓ ${esc(label)} 완료 · ${s}s</span>`
+      :`<span class="er" style="color:var(--bad)">✖ ${esc(label)} 실패 · ${s}s</span>`;
+  };
+}
+
+async function api(path, body, opts){
+  opts=opts||{};
+  const stop=opts.label?startProg(opts.label, opts.eta):null;
+  const c=abReg(); const t0=performance.now();
+  log(`▶ 요청 ${path} ${body?JSON.stringify(body):''}${opts.eta?` · 예상 ~${opts.eta}s`:''}`,'req');
+  try{
+    const r = await fetch(path, {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(body), signal:c.signal});
+    const data = await r.json();
+    log(`◀ 응답 ${path} · ${((performance.now()-t0)/1000).toFixed(1)}s · HTTP ${r.status}`, r.ok?'ok':'er');
+    if(stop) stop(r.ok);
+    showRaw(data, opts.label||path);
+    return {ok:r.ok, data};
+  }catch(e){
+    const ab=e.name==='AbortError';
+    log(ab?`■ ${path} 취소됨`:`✖ 네트워크 오류 ${path}: ${e}`, ab?'warnl':'er');
+    if(stop) stop(false);
+    return {ok:false, data:{error:String(e), aborted:ab}};
+  } finally { abDone(c); }
+}
+function setStatus(s){ $('#status').textContent = s; }
+
+// ---- 강제 중지 (진행 중 요청 취소 + 루프 정지) ----
+const activeAborts=new Set();
+function abReg(){ const c=new AbortController(); activeAborts.add(c); return c; }
+function abDone(c){ activeAborts.delete(c); }
+function forceStop(){
+  try{ STOP_LOOP=true; RUNNING=false; chatBusy=false; }catch(e){}
+  activeAborts.forEach(c=>{ try{ c.abort(); }catch(e){} }); activeAborts.clear();
+  ['btnRead','btnIntervene','btnSweep','btnSlice','btnAll','btnAI','btnLoop','btnChat','model'].forEach(id=>{const e=$('#'+id); if(e) e.disabled=false;});
+  const st=$('#btnStop'); if(st) st.style.display='none';
+  if(_progTimer){ clearInterval(_progTimer); _progTimer=null; }
+  $('#progress').innerHTML='<span style="color:var(--bad)">■ 강제 중지됨 (진행 중이던 서버 계산은 백그라운드에서 마무리될 수 있음)</span>';
+  log('■ 강제 중지 — 진행 중 요청 취소','er'); setStatus('중지됨');
+}
+
+async function loadConfig(){
+  const r = await fetch('/api/config'); CFG = await r.json();
+  const sel = $('#model'); sel.innerHTML = '';
+  CFG.models.forEach(m=>{ const o=document.createElement('option'); o.value=m; o.textContent=m;
+    if(m===CFG.current)o.selected=true; sel.appendChild(o); });
+  $('#modelinfo').textContent = `${CFG.model_id} · ${CFG.n_layers} layers (0–${CFG.source_layers.at(-1)})`;
+  updateBandInfo();
+  updateSweepNote();
+  $('#allnote').textContent = (CFG.n_layers>=30)
+    ? '⏳ gemma는 전체 실행에 수 분 (읽기+스왑+스윕+슬라이스, 각 ~30초~2분). GPU 계산이라 병렬 불가 — 순차 진행. 로그·진행 바 확인.'
+    : '순서대로 자동 실행(1→2→3→4) · 진행 바 표시';
+  log(`모델 로드됨: ${CFG.model_id} · ${CFG.n_layers}층`,'ok');
+  if(CFG.runs_log) log(`📁 자동 기록: ${CFG.runs_log} (실행마다 한 줄씩 append)`,'ok');
+  const aiSel=$('#aiModel'); aiSel.innerHTML='';
+  (CFG.llm_models||[]).forEach(m=>{ const o=document.createElement('option'); o.value=m;
+    o.textContent = m.startsWith('proxy:') ? ('🔒 '+m.slice(6)+' · Claude구독') : m;
+    aiSel.appendChild(o); });
+  // 기본 해석 모델: opus-4.8(프록시) 우선, 없으면 첫 모델
+  const preferModel = (CFG.llm_models||[]).find(m=>m==='proxy:claude-opus-4-8')
+    || (CFG.llm_models||[]).find(m=>/opus-4-8/.test(m)) || (CFG.llm_models||[])[0];
+  if(preferModel) aiSel.value=preferModel;
+  $('#btnAI').disabled = !CFG.has_llm;
+  $('#aiModel').disabled = !CFG.has_llm;
+  $('#btnAI').title = CFG.has_llm ? '선택한 모델로 결과 해석' : '.env에 OPENROUTER_API_KEY 필요';
+  if(!CFG.has_llm) readyInterp();
+}
+function updateBandInfo(){
+  const n = CFG.n_layers, lo=+$('#lo').value, hi=+$('#hi').value;
+  const a=Math.floor(n*lo/100), b=Math.max(a+1,Math.floor(n*hi/100));
+  $('#bandinfo').textContent = `→ 개입 레이어 ${CFG.source_layers[a]}–${CFG.source_layers[Math.min(b,n-1)]}`;
+  const slow = n >= 30;
+  $('#slownote').textContent = slow
+    ? '⏳ 대형 모델(gemma): 스왑 1회 ~30초, 스윕 1~2분. 첫 실행은 더 느릴 수 있어요 — 멈춘 게 아니라 계산 중입니다.'
+    : '';
+}
+function timeHint(){ return CFG && CFG.n_layers>=30 ? ' (대형 모델 ~30초)' : ''; }
+
+// presets
+PRESETS.forEach(([p,s,t])=>{
+  const c=document.createElement('span'); c.className='chip'; c.textContent=s+'→'+t;
+  c.onclick=()=>{ $('#prompt').value=p; $('#src').value=s; $('#tgt').value=t; $('#rtrack').value=s; $('#success').value=''; $('#dsHint').textContent=''; };
+  $('#presets').appendChild(c);
+});
+
+// 논문 probe-swap 90개 로드 (anthropics/jacobian-lens/data/experiments/probe-swap.json)
+let DS=[];
+async function loadDataset(){
+  try{
+    const r=await fetch('/api/probeswap'); const d=await r.json();
+    DS=d.items||[];
+    const sel=$('#dsItem');
+    DS.forEach((it,i)=>{ const o=document.createElement('option'); o.value=i;
+      o.textContent=`${it.name} [${it.category}] · ${it.intermediate}→${it.swap_to}`; sel.appendChild(o); });
+    log(`📚 probe-swap ${DS.length}개 로드됨`,'ok');
+  }catch(e){ log('probe-swap 로드 실패: '+e,'er'); }
+}
+$('#dsItem').onchange = ()=>{
+  const i=parseInt($('#dsItem').value); if(isNaN(i)) return;
+  const it=DS[i];
+  $('#prompt').value=it.prompt;
+  $('#src').value=it.intermediate;      // 뺄 개념 = 브리지
+  $('#tgt').value=it.swap_to;           // 넣을 개념 = 대체 브리지
+  $('#success').value=it.swap_answer;   // 성공 판정 = 최종 답
+  $('#rtrack').value=it.intermediate;   // 읽기 추적 = 브리지
+  $('#dsHint').innerHTML=`브리지 <b>${esc(it.intermediate)}→${esc(it.swap_to)}</b> 스왑 · 정답 <b>${esc(it.answer)}</b> → 성공 시 <b>${esc(it.swap_answer)}</b> 로 바뀌면 OK`;
+};
+
+$('#model').onchange = async e=>{
+  setStatus('모델 로딩 중… (첫 전환은 다운로드로 오래 걸릴 수 있음)');
+  $('#model').disabled=true;
+  const r = await api('/api/model',{key:e.target.value}); CFG=r.data;
+  $('#modelinfo').textContent = `${CFG.model_id} · ${CFG.n_layers} layers`;
+  $('#model').disabled=false; setStatus('준비됨'); updateBandInfo();
+};
+['alpha','lo','hi'].forEach(id=>{ $('#'+id).oninput=()=>{ $('#'+id+'V').textContent=$('#'+id).value; updateBandInfo(); }; });
+function updateSweepNote(){
+  const p=+$('#pts').value;
+  $('#sweepnote').textContent = (CFG&&CFG.n_layers>=30)
+    ? `≈ ${p}회 계산 · gemma는 점당 ~15초 (약 ${Math.round(p*15/60)}분)` : `${p}회 계산`;
+}
+['win','pts'].forEach(id=>{ $('#'+id).oninput=()=>{ $('#'+id+'V').textContent=$('#'+id).value; updateSweepNote(); }; });
+
+function rankClass(r){ if(r==null)return''; if(r<=5)return'rk-good'; if(r<=50)return'rk-mid'; return'rk-bad'; }
+
+$('#btnRead').onclick = async ()=>{
+  $('#btnRead').disabled=true; setStatus('읽는 중…');
+  const r = await api('/api/read',{prompt:$('#prompt').value, position:+$('#rpos').value, track:$('#rtrack').value},
+    {label:'1. 렌즈 읽기', eta:eta('read')});
+  $('#btnRead').disabled=false; setStatus('준비됨');
+  const d=r.data;
+  if(!r.ok){ log('읽기 실패','er'); return; }
+  const tr = d.track_ok ? Math.min(...d.layers.filter(L=>L.track_rank!=null).map(L=>L.track_rank)) : null;
+  log(`읽기: 모델 top '${d.model_top[0]}'`+(d.track_ok?` · best '${d.track}' rank=${tr}`:''),'ok');
+  lastCtx={kind:'read', prompt:$('#prompt').value, position:+$('#rpos').value, track:$('#rtrack').value, data:d}; pushHistory(lastCtx); readyInterp();
+  renderRead(d);
+};
+function renderRead(d){
+  const posTok = d.tokens[(d.position%d.tokens.length+d.tokens.length)%d.tokens.length];
+  let h = `<div class="mut" style="margin:.5rem 0">토큰: ${d.tokens.map(t=>`<code>${esc(t)}</code>`).join(' ')}<br>
+    읽는 위치 ${d.position} = <code>${esc(posTok)}</code> · ${d.approx?'렌즈 최종층 top(모델 근사)':'모델 다음토큰 top'}: ${d.model_top.map(esc).join(', ')}</div>`;
+  h += `<div class="scroll"><table><tr><th>layer</th><th>lens top-6</th>${d.track_ok?`<th>rank('${esc(d.track)}')</th>`:''}</tr>`;
+  d.layers.forEach(L=>{
+    h+=`<tr><td class="mono">${L.layer}</td><td class="mono">${L.top.map(esc).join('  ')}</td>`;
+    if(d.track_ok){ const rk=L.track_rank; h+=`<td class="mono ${rankClass(rk)}">${rk??'-'}</td>`; }
+    h+=`</tr>`;
+  });
+  h+=`</table></div>`;
+  if(d.track && !d.track_ok) h+=`<div class="err">추적 토큰 '${esc(d.track)}'이 단일 토큰이 아니라 rank 생략됨.</div>`;
+  $('#readOut').innerHTML=h;
+}
+
+function distTable(top){
+  const mx = Math.max(...top.map(t=>t.p), 0.0001);
+  return `<table>${top.map(t=>`<tr><td class="mono" style="width:40%">${esc(t.tok)}</td>
+    <td><div class="barwrap"><span class="bar" style="width:${Math.round(t.p/mx*120)}px"></span>
+    <span class="mono">${t.p.toFixed(3)}</span></div></td></tr>`).join('')}</table>`;
+}
+
+$('#btnSweep').onclick = async ()=>{
+  $('#btnSweep').disabled=true; setStatus('스윕 계산 중…'+(CFG&&CFG.n_layers>=30?' gemma 1~2분':''));
+  const body=intervenePayload(); body.window=+$('#win').value; body.points=+$('#pts').value;
+  const r = await api('/api/intervene_sweep', body, {label:'3. 레이어 스윕', eta:eta('sweep', +$('#pts').value)});
+  $('#btnSweep').disabled=false; setStatus('준비됨');
+  if(!r.ok){ $('#sweepOut').innerHTML=`<div class="err">단일 토큰 개념/성공토큰이 필요합니다.</div>`; log('스윕 불가','er'); return; }
+  const pts=r.data.points;
+  log(`스윕: ${pts.length}개 창 · 뒤집힌 창 ${pts.filter(p=>p.flipped).length}개`,'ok');
+  lastCtx={kind:'sweep', prompt:$('#prompt').value, src:$('#src').value.trim(), tgt:$('#tgt').value.trim(), data:r.data}; pushHistory(lastCtx); readyInterp();
+  let h=`<div style="margin-top:.6rem">`;
+  pts.forEach(p=>{
+    const w=Math.round(p.p_tgt*220); const col=p.flipped?'var(--good)':'var(--acc)';
+    h+=`<div class="sweepbar"><span class="mono" style="min-width:70px">L${p.window[0]}–${p.window[1]}</span>
+      <span class="mut" style="min-width:40px">${p.pct}%</span>
+      <span class="b" style="width:${w}px;background:${col}"></span>
+      <span class="val mono">P=${p.p_tgt.toFixed(3)} → ${esc(p.top1)}${p.flipped?' ✔':''}</span></div>`;
+  });
+  h+=`</div>`;
+  $('#sweepOut').innerHTML=h;
+};
+
+async function runSlice(){
+  $('#btnSlice').disabled=true; setStatus('슬라이스(d3) 생성 중…'+timeHint());
+  log(`▶ 슬라이스 요청 (d3${$('#pin').value.trim()?` · 핀 '${$('#pin').value.trim()}'`:''}) · 예상 ~${eta('slice')}s`,'req');
+  const stop=startProg('5. 슬라이스(d3)', eta('slice')); const t0=performance.now();
+  let data=null;
+  try{
+    const _c=abReg();
+    const resp=await fetch('/api/slicepage',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({prompt:$('#prompt').value, track:$('#pin').value}), signal:_c.signal}).finally(()=>abDone(_c));
+    data=await resp.json(); data.ok=resp.ok;
+    log(`◀ 슬라이스 · ${((performance.now()-t0)/1000).toFixed(1)}s · HTTP ${resp.status}`, resp.ok?'ok':'er');
+    stop(resp.ok);
+    if(!resp.ok){ $('#sliceOut').innerHTML=`<div class="err">슬라이스 실패: ${esc(JSON.stringify(data))}</div>`; }
+    else {
+      $('#sliceOut').innerHTML=`<iframe id="sliceFrame" src="/slice?t=${Date.now()}" style="width:100%;height:660px;border:1px solid var(--line);border-radius:8px;background:#fff"></iframe>`;
+      $('#slicenote').textContent=`${data.pin?`핀 '${data.pin}' · `:''}칸 클릭해 토큰 고정 · 🧠 해석 가능`;
+      showRaw({ok:data.ok, pin:data.pin, bytes:data.bytes, summary:data.summary, read:data.read}, '5. 슬라이스');
+      if(data.summary){ lastCtx={kind:'slice', prompt:$('#prompt').value, pin:data.pin, data:data.summary}; pushHistory(lastCtx); readyInterp(); }
+    }
+  }catch(e){ stop(false); log('✖ 슬라이스 오류 '+e,'er'); $('#sliceOut').innerHTML=`<div class="err">오류: ${esc(e)}</div>`; }
+  $('#btnSlice').disabled=false; setStatus('준비됨');
+  return data;
+}
+$('#btnSlice').onclick = runSlice;
+
+function esc(s){ return (s??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+
+// 사용 설명서 + 홈 버튼
+function openHelp(){ $('#help').classList.add('show'); $('#help').scrollTop=0; }
+function goHome(){ $('#help').classList.remove('show'); window.scrollTo({top:0,behavior:'smooth'}); }
+$('#btnHelp').onclick = openHelp;
+$('#btnHome').onclick = goHome;
+$('#btnHome2').onclick = goHome;
+$('#fab').onclick = goHome;
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') goHome(); });
+
+$('#btnForceStop').onclick = forceStop;
+loadConfig().then(()=>setStatus('준비됨'));
+loadDataset();
+</script>
+</body>
+</html>

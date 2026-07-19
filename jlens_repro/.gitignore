@@ -1,0 +1,12 @@
+.venv/
+jacobian-lens/
+__pycache__/
+*.pyc
+.DS_Store
+
+# 비밀: 실제 API 키. .env.example 만 커밋됩니다.
+.env
+
+# 런타임 산출물 (재현마다 생성 — 커밋 대상 아님)
+results/runs.jsonl
+results/saved/
