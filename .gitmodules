@@ -1,3 +1,6 @@
 [submodule "Neuronpedia"]
 	path = Neuronpedia
 	url = https://github.com/hijohnnylin/neuronpedia.git
+[submodule "jlens_repro/jacobian-lens"]
+	path = jlens_repro/jacobian-lens
+	url = https://github.com/anthropics/jacobian-lens.git
