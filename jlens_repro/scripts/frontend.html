@@ -361,7 +361,7 @@
     <div class="step">
       결과 실행 후 모델을 골라 <b>🧠 해석</b> → LLM이 결과 JSON을 한국어로 풀어주고, 다음 제안과
       실행 가능한 제안값을 냅니다.<br>
-      <b>모델 선택:</b> OpenRouter(유료·빠름) 또는 <b>🔒 Claude구독(프록시, 무료·정확)</b>.<br>
+      <b>모델 선택:</b> OpenRouter 또는 로컬 <b>🔒 Claude/Codex 구독 프록시</b>.<br>
       <b>▶ 이 제안대로 재실행:</b> 해석의 제안값을 컨트롤에 적용하고 즉시 재실행.<br>
       <b>🔁 자동반복 N회:</b> 해석→제안 적용→재실행을 상한 N회 반복(무한 루프 방지). <b>⏹ 중지</b>로
       멈춤, <b>해상도6캡</b>으로 속도 조절. 매 회 <b>이전 조건과 비교</b>해 무엇을 바꿨고 지표가
@@ -834,7 +834,8 @@ async function loadConfig(){
   if(CFG.runs_log) log(`📁 자동 기록: ${CFG.runs_log} (실행마다 한 줄씩 append)`,'ok');
   const aiSel=$('#aiModel'); aiSel.innerHTML='';
   (CFG.llm_models||[]).forEach(m=>{ const o=document.createElement('option'); o.value=m;
-    o.textContent = m.startsWith('proxy:') ? ('🔒 '+m.slice(6)+' · Claude구독') : m;
+    o.textContent = m.startsWith('proxy:') ? ('🔒 '+m.slice(6)+' · Claude구독')
+      : m.startsWith('codex:') ? ('🔒 '+m.slice(6)+' · Codex구독') : m;
     aiSel.appendChild(o); });
   // 기본 해석 모델: opus-4.8(프록시) 우선, 없으면 첫 모델
   const preferModel = (CFG.llm_models||[]).find(m=>m==='proxy:claude-opus-4-8')
@@ -842,7 +843,7 @@ async function loadConfig(){
   if(preferModel) aiSel.value=preferModel;
   $('#btnAI').disabled = !CFG.has_llm;
   $('#aiModel').disabled = !CFG.has_llm;
-  $('#btnAI').title = CFG.has_llm ? '선택한 모델로 결과 해석' : '.env에 OPENROUTER_API_KEY 필요';
+  $('#btnAI').title = CFG.has_llm ? '선택한 모델로 결과 해석' : 'OpenRouter 키 또는 로컬 LLM 프록시 필요';
   if(!CFG.has_llm) readyInterp();
 }
 function updateBandInfo(){

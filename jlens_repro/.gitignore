@@ -10,3 +10,4 @@ __pycache__/
 # 런타임 산출물 (재현마다 생성 — 커밋 대상 아님)
 results/runs.jsonl
 results/saved/
+results/*.log

@@ -20,7 +20,9 @@ os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
 
 import datetime
 import json
+import subprocess
 import threading
+import time
 import urllib.error
 import urllib.request
 from contextlib import ExitStack, contextmanager
@@ -45,6 +47,13 @@ PROXY_HEALTH = "http://localhost:11436/health"
 PROXY_CHAT = "http://localhost:11436/v1/chat/completions"
 PROXY_MODELS = ["claude-opus-4-8", "claude-sonnet-5", "claude-haiku-4-5"]
 
+# Local codex-proxy (OpenAI-compatible, backed by the Codex/ChatGPT subscription).
+CODEX_PROXY_HEALTH = "http://localhost:11435/health"
+CODEX_PROXY_CHAT = "http://localhost:11435/v1/chat/completions"
+CODEX_PROXY_MODELS = ["gpt-5.6-sol", "gpt-5.6-terra"]
+CODEX_PROXY_REASONING = "xhigh"
+CODEX_PROXY_SCRIPT = Path.home() / "bin" / "codex-proxy.mjs"
+
 
 def proxy_up():
     try:
@@ -54,14 +63,71 @@ def proxy_up():
         return False
 
 
+def codex_proxy_up():
+    try:
+        with urllib.request.urlopen(CODEX_PROXY_HEALTH, timeout=2) as r:
+            health = json.loads(r.read())
+        return health.get("ok") is True and health.get("status") == "running"
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def ensure_codex_proxy():
+    """Start the local Codex proxy in the background when it is not running."""
+    if os.environ.get("CODEX_PROXY_AUTOSTART", "1").lower() in {"0", "false", "no"}:
+        print("Codex proxy autostart disabled (CODEX_PROXY_AUTOSTART=0)")
+        return False
+    if codex_proxy_up():
+        print("Codex proxy already running: http://localhost:11435")
+        return True
+
+    script = Path(os.environ.get("CODEX_PROXY_SCRIPT", CODEX_PROXY_SCRIPT)).expanduser()
+    if not script.is_file():
+        print(f"Codex proxy not started: script missing at {script}")
+        return False
+
+    log_path = RUNS_DIR / "codex-proxy.log"
+    env = os.environ.copy()
+    env.setdefault("CODEX_MODEL", "gpt-5.6-sol")
+    env.setdefault("CODEX_REASONING", CODEX_PROXY_REASONING)
+    env.setdefault("CODEX_WORKDIR", str(HERE.parent))
+    try:
+        with open(log_path, "a", encoding="utf-8") as log:
+            subprocess.Popen(
+                ["node", str(script)],
+                cwd=HERE.parent,
+                env=env,
+                stdin=subprocess.DEVNULL,
+                stdout=log,
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
+            )
+    except (OSError, subprocess.SubprocessError) as e:
+        print(f"Codex proxy failed to start: {e}")
+        return False
+
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        if codex_proxy_up():
+            print(f"Codex proxy started: http://localhost:11435 (log: {log_path})")
+            return True
+        time.sleep(0.2)
+    print(f"Codex proxy did not become ready; see {log_path}")
+    return False
+
+
 def available_models():
-    """OpenRouter models (if key) + claude-proxy models (if the proxy is up).
-    Proxy models carry a 'proxy:' prefix so /api/interpret can route them."""
+    """Models from available OpenRouter, Claude proxy, and Codex proxy backends.
+
+    Local models carry backend prefixes so the LLM endpoints can route them.
+    """
     models = []
     if os.environ.get("OPENROUTER_API_KEY"):
         models += LLM_MODELS
     if proxy_up():
         models += ["proxy:" + m for m in PROXY_MODELS]
+    if codex_proxy_up():
+        models += ["codex:" + m for m in CODEX_PROXY_MODELS]
     return models
 
 
@@ -729,12 +795,21 @@ def build_user_prompt(kind, payload, history=None, bundle=None):
 
 
 def _llm_call(model, messages, max_tokens=700):
-    """Route a chat-completion to claude-proxy (proxy:*) or OpenRouter. Raises on error."""
+    """Route a chat completion to a local proxy or OpenRouter. Raises on error."""
     if model.startswith("proxy:"):
         body = json.dumps({"model": model.split(":", 1)[1], "messages": messages}).encode()
         req = urllib.request.Request(PROXY_CHAT, data=body, headers={
             "Authorization": "Bearer claude-proxy", "Content-Type": "application/json"})
         timeout = 150
+    elif model.startswith("codex:"):
+        body = json.dumps({
+            "model": model.split(":", 1)[1],
+            "reasoning_effort": CODEX_PROXY_REASONING,
+            "messages": messages,
+        }).encode()
+        req = urllib.request.Request(CODEX_PROXY_CHAT, data=body, headers={
+            "Authorization": "Bearer codex-proxy", "Content-Type": "application/json"})
+        timeout = 300
     else:
         key = os.environ.get("OPENROUTER_API_KEY")
         if not key:
@@ -823,6 +898,7 @@ if __name__ == "__main__":
     import sys
     key = sys.argv[1] if len(sys.argv) > 1 else "gemma4b"
     port = int(sys.argv[2]) if len(sys.argv) > 2 else int(os.environ.get("JLENS_PORT", 8137))
+    ensure_codex_proxy()
     print(f"Loading model '{key}' ... (first run downloads weights)")
     load(key)
     print(f"Ready: {MODELS[key][0]}  |  open http://127.0.0.1:{port}")
