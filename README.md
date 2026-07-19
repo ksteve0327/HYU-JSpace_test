@@ -131,7 +131,18 @@ jlens_repro/
     frontend.html      단일 파일 웹 UI
   results/             재현 산출물 (.md 리포트, .html 히트맵)
   .env.example         환경변수 템플릿  (.env 는 gitignore)
+  jacobian-lens/       [서브모듈] anthropics/jacobian-lens (581d398 핀) — 기반 라이브러리
+Neuronpedia/           [서브모듈] hijohnnylin/neuronpedia — 참고용 (재현에 필수 아님)
 ```
+
+### 서브모듈
+이 저장소는 서브모듈 2개를 포함합니다. `git clone --recursive`(또는
+`git submodule update --init`)로 함께 받습니다.
+
+| 경로 | 출처 | 용도 |
+|---|---|---|
+| `jlens_repro/jacobian-lens` | [anthropics/jacobian-lens](https://github.com/anthropics/jacobian-lens) @ `581d398` | 기반 라이브러리 (`pip install ./jacobian-lens`). **재현에 필요** |
+| `Neuronpedia` | [hijohnnylin/neuronpedia](https://github.com/hijohnnylin/neuronpedia) | 참고용 레퍼런스. 재현엔 불필요 — `--recursive` 없이 클론하면 받지 않아도 됨 |
 
 ---
 
