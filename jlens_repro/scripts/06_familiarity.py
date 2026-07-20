@@ -89,6 +89,9 @@ layers = list(lens.source_layers)
 band = band_from_fraction(layers, 0.40, 0.90)
 EMB = lens_model._embed_tokens.weight  # [vocab, d_model] — semantic neighborhood space
 
+OUT = RESULTS_DIR / "phase6_familiarity"   # Phase 6 artifacts live here
+OUT.mkdir(exist_ok=True)
+
 # ---- metrics --------------------------------------------------------------
 
 
@@ -284,9 +287,9 @@ def run_sweep():
             L.append(f"{i+1}. `{o}`")
         L.append("\n</details>\n")
 
-    out = RESULTS_DIR / f"familiarity_freq_{MODEL_KEY}.md"
+    out = OUT / f"familiarity_freq_{MODEL_KEY}.md"
     out.write_text("\n".join(L) + "\n")
-    png = RESULTS_DIR / f"familiarity_curve_{MODEL_KEY}.png"
+    png = OUT / f"familiarity_curve_{MODEL_KEY}.png"
     curve_png(level_metrics, png)
     print(f"\nWrote {out}\nWrote {png}")
 

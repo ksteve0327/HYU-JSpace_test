@@ -2,7 +2,7 @@
 
 Embeds matplotlib charts as base64 + the design/results narrative. Data are the
 final gemma-3-4b numbers from `familiarity_freq_gemma4b.md` (hardcoded — no model
-needed, so this is fast). Writes `results/FAMILIARITY_REPORT.html`.
+needed, so this is fast). Writes `results/phase6_familiarity/FAMILIARITY_REPORT.html`.
 """
 
 from __future__ import annotations
@@ -288,6 +288,6 @@ F1에서 국가도 판타지도 아닌 <b>이름 철자 되뇌기</b>(Vantoria�
 
 </body></html>"""
 
-out = RESULTS / "FAMILIARITY_REPORT.html"
+outdir = RESULTS / "phase6_familiarity"; outdir.mkdir(exist_ok=True); out = outdir / "FAMILIARITY_REPORT.html"
 out.write_text(HTML, encoding="utf-8")
 print(f"Wrote {out}  ({len(HTML)} bytes)")

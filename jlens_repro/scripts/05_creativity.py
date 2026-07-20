@@ -87,6 +87,9 @@ SEED = int(os.environ.get("CREATIVITY_SEED", "0"))
 # non-default variants get a filename/title tag so runs don't clobber the baseline
 VARIANT = "" if (STEER_SCOPE == "all" and DECODE == "greedy") else f"_{STEER_SCOPE}-{DECODE}"
 
+OUT = RESULTS_DIR / "phase5_creativity"   # Phase 5 artifacts live here
+OUT.mkdir(exist_ok=True)
+
 # ---- load -----------------------------------------------------------------
 
 MODEL_KEY = sys.argv[1] if len(sys.argv) > 1 else "qwen0.8b"
@@ -356,9 +359,9 @@ if STAGE in ("sweep", "all"):
     concept_res = do_sweep(lambda c: concept_dirs(lens, lens_model, band, CONCEPT_IDS[c], device),
                            "concept")
     md = write_sweep_md(concept_res)
-    out = RESULTS_DIR / f"creativity_sweep_{MODEL_KEY}{VARIANT}.md"
+    out = OUT / f"creativity_sweep_{MODEL_KEY}{VARIANT}.md"
     out.write_text("\n".join(md) + "\n")
-    png = RESULTS_DIR / f"creativity_curve_{MODEL_KEY}{VARIANT}.png"
+    png = OUT / f"creativity_curve_{MODEL_KEY}{VARIANT}.png"
     curve_png(concept_res, None, png)
     print(f"\nWrote {out}\nWrote {png}")
 
@@ -378,7 +381,7 @@ elif STAGE == "control":
     concept_res = do_sweep(lambda c: concept_dirs(lens, lens_model, band, CONCEPT_IDS[c], device),
                            "concept")
     random_res = do_sweep(lambda c: random_dirs(band, d_model), "random")
-    png = RESULTS_DIR / f"creativity_curve_{MODEL_KEY}{VARIANT}.png"
+    png = OUT / f"creativity_curve_{MODEL_KEY}{VARIANT}.png"
     curve_png(concept_res, random_res, png)
     lines = [f"# 대조군: 개념방향 vs 무작위방향 — {MODEL_KEY}", ""]
     lines.append("무작위 단위벡터(동일 노름)로 동일 α 스윕. 개념 반영 없이 perplexity만 오르면 "
@@ -390,7 +393,7 @@ elif STAGE == "control":
             lines.append(f"\n### {pk}")
             lines += fmt_rows(random_res[(concept, pk)])
         lines.append("")
-    out = RESULTS_DIR / f"creativity_control_{MODEL_KEY}{VARIANT}.md"
+    out = OUT / f"creativity_control_{MODEL_KEY}{VARIANT}.md"
     out.write_text("\n".join(lines) + "\n")
     print(f"\nWrote {out}\nWrote {png} (concept vs random overlay)")
 
@@ -416,7 +419,7 @@ elif STAGE == "region":
                 lines.append(f"- **{pk}** pull={r['ratio']:.3f} ppl={r['ppl']:.1f} rep={r['rep']:.2f}  ")
                 lines.append(f"  ```\n  {r['text']}\n  ```")
         lines.append("")
-    out = RESULTS_DIR / f"creativity_by_region_{MODEL_KEY}{VARIANT}.md"
+    out = OUT / f"creativity_by_region_{MODEL_KEY}{VARIANT}.md"
     out.write_text("\n".join(lines) + "\n")
     print(f"\nWrote {out}")
 
