@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>J-lens 레이어 탐색기</title>
+<style>
+ :root{--bg:#0f1216;--card:#171c22;--line:#2a323c;--fg:#e8ecf1;--mut:#8a97a5;
+       --acc:#4da3ff;--ok:#3fd68f;--warn:#ffb454;--bad:#ff6b6b;}
+ *{box-sizing:border-box}
+ body{margin:0;background:var(--bg);color:var(--fg);
+      font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","Apple SD Gothic Neo",sans-serif}
+ header{display:flex;align-items:center;gap:1rem;padding:.7rem 1.2rem;border-bottom:1px solid var(--line)}
+ header h1{font-size:1.05rem;margin:0}
+ header .mut{color:var(--mut);font-size:.8rem}
+ header a{color:var(--acc);text-decoration:none;font-size:.85rem}
+ main{padding:1rem 1.2rem;max-width:1500px;margin:0 auto}
+ .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:.9rem 1rem;margin-bottom:.9rem}
+ label{font-size:.8rem;color:var(--mut)}
+ input[type=text],textarea,select{background:#0c0f13;color:var(--fg);border:1px solid var(--line);
+   border-radius:6px;padding:.4rem .55rem;font-size:.88rem}
+ input[type=range]{accent-color:var(--acc)}
+ button{background:var(--acc);color:#06121f;border:0;border-radius:7px;padding:.45rem .9rem;
+   font-weight:700;font-size:.88rem;cursor:pointer}
+ button.sec{background:#232b34;color:var(--fg)}
+ button:disabled{opacity:.45;cursor:default}
+ .row{display:flex;gap:.8rem;flex-wrap:wrap;align-items:center}
+ .grow{flex:1 1 320px}
+ #status{font-size:.83rem;color:var(--mut);min-height:1.2em}
+ #status.err{color:var(--bad)}
+ /* grid */
+ .gwrap{overflow-x:auto;padding-bottom:.4rem}
+ .glabel{font-size:.8rem;color:var(--mut);margin:.2rem 0 .3rem}
+ .grid{display:inline-grid;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:6px}
+ .cell,.hcell,.lcell,.scell{background:#10151b;font:9px/1.1 ui-monospace,Menlo,monospace;
+   display:flex;align-items:center;justify-content:center;overflow:hidden;white-space:nowrap}
+ .cell{width:30px;height:17px;cursor:pointer;color:#cfd8e3}
+ .hcell{width:30px;height:30px;writing-mode:vertical-rl;color:var(--mut);font-size:9px;padding:2px 0}
+ .hcell.gen{color:var(--ok);font-weight:700}
+ .lcell{width:44px;height:17px;color:var(--mut);justify-content:flex-end;padding-right:5px}
+ .lcell.band{color:var(--warn)}
+ .scell{width:70px;height:17px;justify-content:flex-start;gap:2px;padding-left:4px}
+ .sbar{height:6px;border-radius:2px}
+ .cell.hit{color:#052; font-weight:700}
+ .cell.diff{outline:2px solid var(--bad);outline-offset:-2px;z-index:2}
+ .cell.cross{outline:2px solid #fff;outline-offset:-2px;z-index:3}
+ .cell.hid,.hcell.hid{visibility:hidden}
+ .gendiv{border-left:3px solid var(--ok) !important}
+ /* answer + playback */
+ #answer{font:1rem/1.5 ui-monospace,Menlo,monospace;color:var(--ok);min-height:1.5em;
+   background:#0c0f13;border:1px solid var(--line);border-radius:6px;padding:.5rem .7rem}
+ #detail{position:fixed;right:12px;top:64px;width:230px;background:var(--card);
+   border:1px solid var(--line);border-radius:10px;padding:.7rem .8rem;font-size:.8rem;display:none;z-index:9}
+ #detail h3{margin:.1rem 0 .4rem;font-size:.85rem}
+ #detail table{width:100%;border-collapse:collapse;font:11px ui-monospace,Menlo,monospace}
+ #detail td{padding:.1rem .2rem;border-bottom:1px solid var(--line)}
+ #curve{background:#0c0f13;border:1px solid var(--line);border-radius:6px}
+ .legend{font-size:.78rem;color:var(--mut)}
+ .dotb{color:var(--acc)} .dotr{color:var(--bad)}
+ .iv{display:none;gap:.6rem;align-items:center;flex-wrap:wrap}
+</style>
+</head>
+<body>
+<header>
+  <h1>🔬 J-lens 레이어 탐색기</h1>
+  <span class="mut" id="mbadge">모델 로딩…</span>
+  <select id="mSel" style="font-size:.8rem"></select>
+  <span style="flex:1"></span>
+  <a href="/">← 개입 테스터</a>
+</header>
+<main>
+
+<div class="card">
+  <div class="row">
+    <input type="text" id="prompt" class="grow" value="The capital of France is">
+    <label>생성 <span id="nV">12</span>tok</label>
+    <input type="range" id="nNew" min="4" max="24" step="1" value="12" style="width:110px">
+    <button id="btnRun">실행 ▶</button>
+  </div>
+  <div class="row" style="margin-top:.6rem">
+    <label>개입</label>
+    <select id="ivMode">
+      <option value="">없음</option><option value="swap">스왑</option>
+      <option value="steer">스티어</option><option value="ablate">절제</option>
+      <option value="combo">콤보(JSON)</option>
+    </select>
+    <span class="iv" id="fSwap"><input type="text" id="src" placeholder="src (Paris)" size="9">
+      →<input type="text" id="tgt" placeholder="tgt (London)" size="9"></span>
+    <span class="iv" id="fConcept"><input type="text" id="concept" placeholder="개념" size="10"></span>
+    <span class="iv" id="fCombo"><textarea id="opsJson" rows="1" cols="42"
+      placeholder='[{"type":"swap","src":"Paris","tgt":"London","alpha":2}]'></textarea></span>
+    <span class="iv" id="fCommon">
+      <label>α <span id="aV">2</span></label><input type="range" id="alpha" min="0.5" max="8" step="0.5" value="2" style="width:80px">
+      <label>밴드 <span id="loV">40</span>–<span id="hiV">90</span>%</label>
+      <input type="range" id="lo" min="0" max="90" step="5" value="40" style="width:70px">
+      <input type="range" id="hi" min="10" max="100" step="5" value="90" style="width:70px">
+      <label><input type="checkbox" id="cmp" checked> 전/후 비교</label>
+    </span>
+  </div>
+  <div id="status" style="margin-top:.5rem"></div>
+</div>
+
+<div class="card" id="playCard" style="display:none">
+  <div class="row">
+    <button id="btnPlay" class="sec">▶ 재생</button>
+    <select id="speed" style="font-size:.8rem"><option value="900">0.5×</option>
+      <option value="450" selected>1×</option><option value="200">2×</option></select>
+    <input type="range" id="scrub" min="0" value="0" style="flex:1">
+    <span class="mut" id="stepV" style="font-size:.8rem"></span>
+  </div>
+  <div id="answer" style="margin-top:.5rem"></div>
+</div>
+
+<div id="grids"></div>
+
+<div class="card" id="curveCard" style="display:none">
+  <b style="font-size:.9rem">등장 곡선</b>
+  <span class="legend">— 생성 토큰이 렌즈 top-5에 처음 든 레이어 (<span class="dotb">●기본</span>
+    <span class="dotr" id="curveCmpLbl" style="display:none">●개입</span>) · 점이 낮을수록 얕은 층에서 이미 답이 보임</span>
+  <div style="overflow-x:auto"><canvas id="curve" width="900" height="220"></canvas></div>
+</div>
+
+</main>
+<div id="detail"></div>
+
+<script>
+const $=s=>document.querySelector(s);
+let CFG=null, TRACES=[];   // [{label, data}]
+let reveal=1e9, playTimer=null;
+
+// ---- config / model ----
+async function loadCfg(){
+  CFG=await (await fetch('/api/config')).json();
+  $('#mbadge').textContent=`${CFG.current} · ${CFG.n_layers}층 (L0–L${CFG.n_layers-1})`;
+  const s=$('#mSel'); s.innerHTML='';
+  CFG.models.forEach(m=>{const o=document.createElement('option');o.value=m;o.textContent=m;
+    if(m===CFG.current)o.selected=true;s.appendChild(o);});
+}
+$('#mSel')&&($('#mSel').onchange=async e=>{
+  const k=e.target.value; if(k===CFG.current)return;
+  if(!confirm(`모델을 ${k}(으)로 전환할까요? (재로드 — gemma는 1분+)`)){e.target.value=CFG.current;return;}
+  setStatus(`모델 전환 중… (${k})`);
+  await fetch('/api/model',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:k})});
+  await loadCfg(); setStatus('전환 완료');
+});
+
+// ---- controls ----
+['nNew','alpha','lo','hi'].forEach(id=>{const m={nNew:'nV',alpha:'aV',lo:'loV',hi:'hiV'};
+  $('#'+id).oninput=e=>$('#'+m[id]).textContent=e.target.value;});
+$('#ivMode').onchange=()=>{
+  const m=$('#ivMode').value;
+  $('#fSwap').style.display=m==='swap'?'flex':'none';
+  $('#fConcept').style.display=(m==='steer'||m==='ablate')?'flex':'none';
+  $('#fCombo').style.display=m==='combo'?'flex':'none';
+  $('#fCommon').style.display=m?'flex':'none';
+};
+function setStatus(t,err){const s=$('#status');s.textContent=t;s.className=err?'err':'';}
+
+function ivPayload(){
+  const m=$('#ivMode').value; if(!m) return null;
+  const base={mode:m,alpha:parseFloat($('#alpha').value),
+              lo:parseFloat($('#lo').value),hi:parseFloat($('#hi').value)};
+  if(m==='swap')return{...base,src:$('#src').value.trim(),tgt:$('#tgt').value.trim()};
+  if(m==='combo'){try{base.ops=JSON.parse($('#opsJson').value);}catch(e){throw new Error('콤보 JSON 파싱 실패');}
+    return base;}
+  return{...base,concept:$('#concept').value.trim()};
+}
+
+// ---- run ----
+$('#btnRun').onclick=async()=>{
+  let iv; try{iv=ivPayload();}catch(e){setStatus(e.message,1);return;}
+  const jobs=[];
+  const common={prompt:$('#prompt').value,max_new_tokens:parseInt($('#nNew').value),topk:8};
+  if(iv&&$('#cmp').checked){jobs.push({label:'기본(무개입)',body:common});
+    jobs.push({label:`개입(${iv.mode})`,body:{...common,...iv}});}
+  else if(iv) jobs.push({label:`개입(${iv.mode})`,body:{...common,...iv}});
+  else jobs.push({label:'기본',body:common});
+  $('#btnRun').disabled=true; TRACES=[];
+  const t0=Date.now(); const tick=setInterval(()=>setStatus(`추적 중… ${((Date.now()-t0)/1000).toFixed(0)}s (${TRACES.length}/${jobs.length} 완료)`),500);
+  try{
+    for(const j of jobs){
+      const r=await fetch('/api/trace',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(j.body)});
+      const d=await r.json();
+      if(d.error){setStatus(d.error==='multi_token'?`단일 토큰이 아님: ${d.words.join(', ')}`:JSON.stringify(d),1);
+        clearInterval(tick);$('#btnRun').disabled=false;return;}
+      TRACES.push({label:j.label,data:d});
+    }
+    clearInterval(tick);
+    setStatus(`완료 — ${TRACES.map(t=>`${t.label} ${t.data.elapsed}s`).join(' · ')} | 답: "${TRACES[0].data.gen_text.trim().slice(0,60)}"`);
+    reveal=1e9; render();
+  }catch(e){clearInterval(tick);setStatus('오류: '+e,1);}
+  $('#btnRun').disabled=false;
+};
+
+// ---- render ----
+function heat(p){return `hsl(210 70% ${Math.round(16+p*38)}%)`;}
+function heatHit(p){return `hsl(145 65% ${Math.round(24+p*30)}%)`;}
+
+function render(){
+  const G=$('#grids'); G.innerHTML='';
+  const base=TRACES[0].data;
+  const nGen=base.cols.filter(c=>c.kind==='gen').length;
+  $('#playCard').style.display=''; $('#curveCard').style.display='';
+  $('#scrub').max=nGen; $('#scrub').value=Math.min(reveal,nGen);
+  TRACES.forEach((tr,ti)=>G.appendChild(gridFor(tr,ti)));
+  drawCurve(); syncReveal();
+}
+
+function gridFor(tr,ti){
+  const d=tr.data, L=d.layers, T=d.cols.length;
+  const other=TRACES.length>1?TRACES[1-ti].data:null;
+  const wrap=document.createElement('div'); wrap.className='card';
+  wrap.innerHTML=`<div class="glabel"><b>${tr.label}</b> — 셀=렌즈 top-1 (밝을수록 확률↑,
+    <span style="color:var(--ok)">초록=그 열의 최종 출력과 일치</span>${other?', <span style="color:var(--bad)">빨간 테두리=기본과 top-1 다름</span>':''})
+    · 좌측 주황 층번호=워크스페이스 밴드 · 우측 레인: <span style="color:var(--acc)">top-1확률</span>/<span style="color:var(--ok)">엔트로피</span></div>`;
+  const gw=document.createElement('div'); gw.className='gwrap';
+  const g=document.createElement('div'); g.className='grid';
+  g.style.gridTemplateColumns=`44px repeat(${T},30px) 70px`;
+  // header row
+  g.appendChild(el('lcell','층\\열'));
+  d.cols.forEach((c,ci)=>{const h=el('hcell',(c.kind==='gen'?c.produced:c.tok).trim()||'·');
+    h.classList.add(c.kind); if(genIdx(d,ci)===0)h.classList.add('gendiv');
+    h.dataset.c=ci; g.appendChild(h);});
+  g.appendChild(el('scell','평균'));
+  // stats: per-layer means
+  const rows=[...L].reverse();
+  const maxEnt=Math.max(...rows.map(l=>mean(d.cells[l].map(c=>c.ent))));
+  rows.forEach(l=>{
+    const lab=el('lcell','L'+l); if(l>=d.band[0]&&l<=d.band[1])lab.classList.add('band');
+    g.appendChild(lab);
+    d.cells[l].forEach((cd,ci)=>{
+      const c=el('cell',cd.top[0].t.trim().slice(0,5)||'·');
+      const hit=cd.top[0].t===d.cols[ci].produced;
+      c.style.background=hit?heatHit(cd.top[0].p):heat(cd.top[0].p);
+      if(hit)c.classList.add('hit');
+      if(other&&other.cells[l]&&other.cells[l][ci]&&other.cells[l][ci].top[0].t!==cd.top[0].t)c.classList.add('diff');
+      if(genIdx(d,ci)===0)c.classList.add('gendiv');
+      c.dataset.l=l;c.dataset.c=ci;c.dataset.ti=ti;
+      c.onclick=()=>showDetail(tr,l,ci);
+      c.onmouseenter=()=>cross(l,ci,true); c.onmouseleave=()=>cross(l,ci,false);
+      g.appendChild(c);
+    });
+    const m1=mean(d.cells[l].map(c=>c.top[0].p)), m2=mean(d.cells[l].map(c=>c.ent))/(maxEnt||1);
+    const s=el('scell',''); s.innerHTML=`<span class="sbar" style="width:${4+m1*60}px;background:var(--acc)"></span>
+      <span class="sbar" style="width:${4+m2*60}px;background:var(--ok)"></span>`;
+    g.appendChild(s);
+  });
+  gw.appendChild(g); wrap.appendChild(gw); return wrap;
+}
+const el=(cls,txt)=>{const e=document.createElement('div');e.className=cls;e.textContent=txt;return e;};
+const mean=a=>a.reduce((x,y)=>x+y,0)/a.length;
+const genIdx=(d,ci)=>{const g0=d.cols.findIndex(c=>c.kind==='gen');return ci-g0;};
+
+function cross(l,ci,on){document.querySelectorAll(`.cell[data-l="${l}"][data-c="${ci}"]`)
+  .forEach(c=>c.classList.toggle('cross',on));}
+
+function showDetail(tr,l,ci){
+  const d=tr.data, cd=d.cells[l][ci], col=d.cols[ci];
+  const p=$('#detail'); p.style.display='block';
+  p.innerHTML=`<h3>${tr.label} · L${l} · 열${ci}</h3>
+    <div class="mut" style="font-size:.75rem">입력 <code>${col.tok}</code> → 출력 <code>${col.produced}</code>
+    · 출력토큰 렌즈rank <b>${cd.rank}</b><br>엔트로피 ${cd.ent} · ‖h‖ ${cd.rn}</div>
+    <table>${cd.top.map(t=>`<tr><td>${t.t.replace(/</g,'&lt;')||'·'}</td><td style="text-align:right">${t.p}</td></tr>`).join('')}</table>
+    <div style="text-align:right;margin-top:.3rem"><button class="sec" onclick="detail.style.display='none'" style="font-size:.75rem;padding:.2rem .5rem">닫기</button></div>`;
+}
+
+// ---- playback ----
+function syncReveal(){
+  const base=TRACES[0].data;
+  const nGen=base.cols.filter(c=>c.kind==='gen').length;
+  const r=Math.min(reveal,nGen);
+  document.querySelectorAll('.cell,.hcell').forEach(c=>{
+    const ci=parseInt(c.dataset.c); if(isNaN(ci))return;
+    const ti=parseInt(c.dataset.ti||'0');
+    const gi=genIdx(TRACES[Math.min(ti,TRACES.length-1)].data,ci);
+    c.classList.toggle('hid',gi>=0&&gi>=r);
+  });
+  $('#scrub').value=r;
+  $('#stepV').textContent=`${r}/${nGen}`;
+  $('#answer').textContent=TRACES[0].data.gen_tokens.slice(0,Math.max(0,r)).join('')||'…';
+}
+$('#scrub').oninput=e=>{reveal=parseInt(e.target.value);syncReveal();};
+$('#btnPlay').onclick=()=>{
+  if(playTimer){clearInterval(playTimer);playTimer=null;$('#btnPlay').textContent='▶ 재생';return;}
+  const nGen=TRACES[0].data.cols.filter(c=>c.kind==='gen').length;
+  if(reveal>=nGen)reveal=0;
+  $('#btnPlay').textContent='⏸ 정지';
+  playTimer=setInterval(()=>{reveal++;syncReveal();
+    if(reveal>=nGen){clearInterval(playTimer);playTimer=null;$('#btnPlay').textContent='▶ 재생';}},
+    parseInt($('#speed').value));
+};
+
+// ---- emergence curve ----
+function emergence(d){
+  // for each gen column: lowest layer where produced-token lens rank <= 5
+  const g0=d.cols.findIndex(c=>c.kind==='gen'), out=[];
+  for(let ci=g0;ci<d.cols.length;ci++){
+    let lay=null;
+    for(const l of d.layers){ if(d.cells[l][ci].rank<=5){lay=l;break;} }
+    out.push(lay);
+  }
+  return out;
+}
+function drawCurve(){
+  const cv=$('#curve'),ctx=cv.getContext('2d');
+  const base=TRACES[0].data, Lmax=base.layers[base.layers.length-1];
+  const es=TRACES.map(t=>emergence(t.data));
+  const n=es[0].length; cv.width=Math.max(600,60+n*46);
+  ctx.clearRect(0,0,cv.width,cv.height);
+  const X=i=>50+i*46+18, Y=l=>l==null?12:196-(l/Lmax)*176;
+  ctx.strokeStyle='#2a323c';ctx.fillStyle='#8a97a5';ctx.font='10px monospace';
+  [0,Math.round(Lmax/2),Lmax].forEach(l=>{ctx.beginPath();ctx.moveTo(46,Y(l));ctx.lineTo(cv.width-6,Y(l));
+    ctx.stroke();ctx.fillText('L'+l,6,Y(l)+3);});
+  // band shading
+  ctx.fillStyle='rgba(255,180,84,.07)';
+  ctx.fillRect(46,Y(base.band[1]),cv.width-52,Y(base.band[0])-Y(base.band[1]));
+  $('#curveCmpLbl').style.display=TRACES.length>1?'':'none';
+  es.forEach((e,ti)=>{
+    ctx.strokeStyle=ctx.fillStyle=ti===0?'#4da3ff':'#ff6b6b';
+    ctx.beginPath();
+    e.forEach((l,i)=>{const y=Y(l); i===0?ctx.moveTo(X(i),y):ctx.lineTo(X(i),y);});
+    ctx.stroke();
+    e.forEach((l,i)=>{ctx.beginPath();ctx.arc(X(i),Y(l),3.5,0,7);ctx.fill();
+      if(l==null){ctx.fillText('미등장',X(i)-14,8);}});
+  });
+  ctx.fillStyle='#e8ecf1';ctx.font='11px monospace';
+  TRACES[0].data.gen_tokens.forEach((t,i)=>{if(i<n)ctx.fillText(t.trim().slice(0,5)||'·',X(i)-12,214);});
+}
+
+loadCfg(); $('#ivMode').onchange();
+</script>
+</body>
+</html>

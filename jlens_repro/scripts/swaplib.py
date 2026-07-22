@@ -123,6 +123,36 @@ def dir_hooks(lens_model, layer_dirs, alpha, mode):
             h.remove()
 
 
+@contextmanager
+def trace_hooks(lens_model, layer_indices):
+    """Accumulating residual recorder for a whole `generate` call.
+
+    Unlike jlens.ActivationRecorder (keeps only the last forward), this appends
+    every forward's hidden states per layer: the prompt forward contributes
+    [P, d], each KV-cached decode step appends [1, d]. Chunks stay ON DEVICE
+    (a per-step .cpu() would sync/stall the MPS pipeline ~n_layers times per
+    token); memory is tiny ([T, d] per layer). Caller cats/moves once afterward.
+    Yields {layer: [chunks]}. Register AFTER any intervention hooks so the
+    recorded residual is the intervened one (hooks run in registration order).
+    """
+    acc = {L: [] for L in layer_indices}
+    handles = []
+
+    def mk(L):
+        def hook(_m, _i, output):
+            h = output[0] if isinstance(output, tuple) else output
+            acc[L].append(h[0].detach())
+        return hook
+
+    try:
+        for L in layer_indices:
+            handles.append(lens_model.layers[L].register_forward_hook(mk(L)))
+        yield acc
+    finally:
+        for h in handles:
+            h.remove()
+
+
 def next_token_logits(hf, tok, prompt, device):
     enc = tok(prompt, return_tensors="pt").to(device)
     with torch.inference_mode():

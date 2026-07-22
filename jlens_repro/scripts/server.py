@@ -35,7 +35,7 @@ import jlens
 import jlens.vis as jvis
 from common import MODELS, get_device_dtype, load_hf, load_lens, resolve_single_token, token_variants
 from swaplib import (band_from_fraction, build_swap_operators, concept_dirs, dir_hooks,
-                     next_token_logits, swap_hooks)
+                     next_token_logits, swap_hooks, trace_hooks)
 
 HERE = Path(__file__).resolve().parent
 app = Flask(__name__)
@@ -273,6 +273,107 @@ def best_rank_variants(row, ids):
 @app.get("/")
 def index():
     return send_file(HERE / "frontend.html")
+
+
+@app.get("/explorer")
+def explorer():
+    return send_file(HERE / "explorer.html")
+
+
+@app.post("/api/trace")
+def trace():
+    """Layer-flow trace: greedy-generate while recording every layer's residual at
+    every position, then read each (layer, position) through the J-lens offline.
+
+    Body: {prompt, max_new_tokens?, topk?, mode?+ops-fields (same as /api/intervene)}.
+    Position p's cell = the lens view at p; the token it *produced* is seq[p+1]
+    (the last generated token is never forwarded, so columns = P+N-1 and map 1:1).
+    """
+    d = request.json or {}
+    prompt = d["prompt"]
+    n = max(1, min(int(d.get("max_new_tokens", 12)), 24))
+    k = max(3, min(int(d.get("topk", 8)), 12))
+    mode = d.get("mode")
+    ops = []
+    band = None
+    if mode:
+        lo = float(d.get("lo", 40)) / 100
+        hi = float(d.get("hi", 90)) / 100
+        band = band_from_fraction(STATE["layers"], lo, hi)
+        ops, _ = ops_from_request(mode, d)
+        bad = _bad_tokens(ops, "")
+        if bad:
+            return jsonify({"error": "multi_token", "words": bad}), 400
+    layers = STATE["layers"]
+    t0 = time.monotonic()
+    with INFER_LOCK:
+        enc = STATE["tok"](prompt, return_tensors="pt").to(STATE["device"])
+        plen = enc.input_ids.shape[1]
+        with torch.inference_mode(), ExitStack() as st:
+            if ops:
+                st.enter_context(op_hooks(band, ops))  # before recorder: record intervened h
+            acc = st.enter_context(trace_hooks(STATE["lens_model"], layers))
+            gen = STATE["hf"].generate(**enc, max_new_tokens=n, do_sample=False,
+                                       pad_token_id=STATE["tok"].eos_token_id,
+                                       output_scores=True, return_dict_in_generate=True)
+        seq = gen.sequences[0].cpu()
+        gen_ids = seq[plen:].tolist()
+
+        dec_cache = {}
+
+        def dc(tid):
+            tid = int(tid)
+            if tid not in dec_cache:
+                dec_cache[tid] = STATE["tok"].decode([tid])
+            return dec_cache[tid]
+
+        T = plen + len(gen_ids) - 1  # captured positions (last gen token never forwarded)
+        produced = seq[1:T + 1]      # produced[p] = token emitted from position p
+        prod_dev = produced.to(STATE["device"])
+        cells = {}
+        with torch.inference_mode():
+            for L in layers:
+                # chunks stayed on device; one cat + float, all math on device,
+                # a single .cpu() sync per layer at the end.
+                H = torch.cat(acc[L], dim=0)[:T].float()            # [T, d] on device
+                Z = STATE["lens"].transport(H, L)                    # [T, d] (J moved to device)
+                logits = STATE["lens_model"].unembed(Z).float()
+                P = logits.softmax(-1)                               # [T, V]
+                vals, idx = P.topk(k)
+                ent = -(P * P.clamp_min(1e-12).log()).sum(-1)
+                pp = P.gather(-1, prod_dev[:, None])
+                rank = (P > pp).sum(-1) + 1
+                rnorm = H.norm(dim=-1)
+                vals, idx = vals.cpu(), idx.cpu()
+                ent, rank, rnorm = ent.cpu(), rank.cpu(), rnorm.cpu()
+                cells[str(L)] = [{
+                    "top": [{"t": dc(idx[p, j]), "p": round(float(vals[p, j]), 3)} for j in range(k)],
+                    "ent": round(float(ent[p]), 2),
+                    "rank": int(rank[p]),
+                    "rn": round(float(rnorm[p]), 1),
+                } for p in range(T)]
+                del logits, P, H, Z
+
+        model_steps = []
+        for s in gen.scores:
+            row = s[0].float()
+            p = row.softmax(-1)
+            v, i = p.topk(5)
+            model_steps.append({
+                "top": [{"t": dc(i[j]), "p": round(float(v[j]), 3)} for j in range(5)],
+                "ent": round(float(-(p * p.clamp_min(1e-12).log()).sum()), 2)})
+
+    cols = [{"kind": "prompt" if p < plen - 1 else "gen",
+             "tok": dc(seq[p]), "produced": dc(produced[p])} for p in range(T)]
+    blo, bhi = band_from_fraction(layers, 0.40, 0.90)[0], band_from_fraction(layers, 0.40, 0.90)[-1]
+    gen_text = STATE["tok"].decode(seq[plen:], skip_special_tokens=True)
+    elapsed = round(time.monotonic() - t0, 1)
+    log_run("trace", {"prompt": prompt, "n_new": len(gen_ids), "mode": mode, "ops": ops,
+                      "gen": gen_text, "elapsed_s": elapsed})
+    return jsonify({"prompt_tokens": [dc(t) for t in seq[:plen]], "gen_tokens": [dc(t) for t in gen_ids],
+                    "gen_text": gen_text, "cols": cols, "cells": cells, "layers": layers,
+                    "band": [blo, bhi], "model_steps": model_steps, "plen": plen,
+                    "mode": mode, "ops": ops, "elapsed": elapsed})
 
 
 @app.get("/api/config")
